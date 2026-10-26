@@ -47,3 +47,5 @@ utils::globalVariables(c(
   "twin_ST", "twin_TT", "twin_UC", "twin_UK", "unknown", "unknown1", "unknown2", "unknown3", "unknown4",
   "update_code_dates", "update_episode_no_gap", "update_episode_start", "visit_id", "visit_type", "vocab",
   "weeks_before", "within_56day_preg", "within_preg"))
+utils::globalVariables(c(
+  ".age", "LEVE_DODSTATUS_FODSEL", "N", "Outcome", "SVLEN_ABR", "Total", "age_group", "age_mbrn", "birth_year_est", "code", "codes_kuhr", "codes_mbrn", "codes_npr", "d", "dating_class", "dating_code", "dating_source", "days", "dout", "dstart", "estimated", "fixed", "ga_max", "ga_median", "ga_min", "ga_q1", "ga_q3", "hi", "i.age_mbrn", "i.birth_year_est", "i.code", "i.codes_mbrn", "i.outcome_final", "i.rid", "i.source", "i.v", "i.dout", "lo", "meaning", "mother_age", "n", "n_records", "n_women", "oc_kuhr", "oc_npr", "outcome", "outcome_code", "outcome_lable", "outcome_source", "p", "pct", "prio", "priority", "recorded", "registry", "rid", "txt", "type", "x.code", "x.d", "x.vocab", "year_outcome", "source", "vocab"))

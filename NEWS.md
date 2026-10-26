@@ -9,9 +9,25 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
   (`settings =`); a setting given both ways is an error.
 * The defaults are the settings of the main analysis of the comparison: `stillbirth_min_days = 154`
   (22+0 weeks, the MBRN definition), `marker_rejection_days = 119` (17 weeks, as in Nordeng et al.
-  2024), `normalize_codes = TRUE`, and the other values of version 1.3.
+  2024), `normalize_codes = TRUE`, `induced_abortion_default_days = 49` (7+0 weeks, close to the median
+  gestational age of about 46 days in the Norwegian Registry of Pregnancy Termination), and the other
+  values of version 1.3; in addition the birth weight
+  takes part in the stillbirth rule (`stillbirth_min_weight_g = 500`, `stillbirth_weight_rule = "and"`:
+  22 weeks and 500 g, the MBRN definition) when it is mapped.
 * New function `uio_v13_settings()`: the settings of the R script version 1.3.
 * `workdir` has no default any more (it was a project folder on TSD).
+
+## Results: description of each pregnancy, summary, output folder
+
+* Each pregnancy now has `year_outcome`, `dating_class` (recorded, estimated, fixed), `dating_source`
+  and `dating_code` (the marker or O35 code that set the start), `outcome_source` and `outcome_code`
+  (the registry and code that decided the outcome), `codes_mbrn`, `codes_npr`, `codes_kuhr` (all
+  pregnancy codes of the episode) and `mother_age`.
+* At the end of the run a summary is printed: the availability of the codes in NPR and KUHR (with
+  each marker's days to the start), the settings, and the number of pregnancies of each outcome.
+* `output_dir` (default `workdir/output`) receives the pregnancies (`.rds`), the outcome table and the
+  code availability (`.csv`) and an HTML report (by year, by age, gestational age per outcome, dating,
+  sources, codes, settings). Counts of 1-4 are shown as `<5` (`mask_below`).
 
 ## Source data
 
@@ -29,6 +45,14 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
   `birth_year` (a birth-year limit without the column was an error). `female_value` gives the code
   of women in the `gender` column.
 * `source_files` has no default in `run_uio_pa()`.
+* The MBRN of current deliveries: the vital status `vital_status` (`leve_dodstatus_fodsel`: 1, 2, 3) can
+  replace `death_cat` (`DODKAT`, old or 2024 coding), the gestational age in weeks `gestational_weeks`
+  (`svlen`, used as weeks x 7 + 3 days) can replace `gestational_days`, and `abortion_weeks`
+  (`svlen_abr`) fills it for abortions approved by a board. `apgar5`, `mother_age` and `child_order`
+  are optional. `uio_mbrn_columns()` gives the names of the current MBRN variables.
+* P1380: all six NPR parts (SOM, AVTSOM, PHBU, PHV, AVTPHV, TSB). The birth weight (`VEKT`) is mapped in
+  the three project definitions.
+* Without a mapped birth weight the stillbirth rule uses gestational age alone, with a message.
 
 ## New settings (defaults = the values of version 1.3)
 
@@ -110,7 +134,7 @@ First release as an installable R package. The algorithm is version 1.3
 
 The defaults reproduce v1.3:
 
-* `induced_abortion_default_days = 56`, `miscarriage_default_days = 70`,
+* `induced_abortion_default_days`, `miscarriage_default_days = 70`,
   `molar_default_days = 77`, `ectopic_default_days = 56`: the outcome-specific default pregnancy
   lengths.
 * `o35_induced_days = 80`: pregnancy length of an induced abortion with an O35 prenatal-diagnosis

@@ -52,8 +52,11 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   cfg_o35_window_days               = settings$o35_window_days         # v1.3: 27
   same_event_episode_days           = cfg_same_event_days - 1          # v1.3: episode_count55
   use_weight = !is.null(cfg_stillbirth_min_weight_g)
-  if(use_weight && !"birth_weight" %in% names(source_files$birth_registry$variables))
-    stop("stillbirth_min_weight_g is set, but source_files$birth_registry$variables has no `birth_weight` (see uio_source()).", call. = FALSE)
+  # [v2.0.0] without a mapped birth weight, the stillbirth rule uses gestational age alone
+  if(use_weight && !"birth_weight" %in% names(source_files$birth_registry$variables)){
+    cli::cli_alert_warning("Birth weight is not mapped (`birth_weight` in uio_source()): stillbirth by gestational age only.")
+    use_weight = FALSE
+  }
   # [v1.3.1] normalize_codes also normalises the code column of the marker lists (a no-op for the
   # default lists, which are already upper case without separators)
   if(isTRUE(cfg_normalize_codes)){
@@ -168,14 +171,9 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
     }
 
 
-    setnames(mbrn, source_files$birth_registry$variables["mother_id"], "PasientLopeNr_MOR")
-    setnames(mbrn, source_files$birth_registry$variables["event_date"], "DAGER_FDATO")
-    setnames(mbrn, source_files$birth_registry$variables["child_order"], "PLUREK")
-    setnames(mbrn, source_files$birth_registry$variables["gestational_days"], "SVLEN_DG")
-    setnames(mbrn, source_files$birth_registry$variables["death_cat"], "DODKAT")
-    setnames(mbrn, source_files$birth_registry$variables["apgar5"], "APGAR5")
-    setnames(mbrn, source_files$birth_registry$variables["mother_age"], "MORS_ALDER")
-    if(use_weight) setnames(mbrn, source_files$birth_registry$variables["birth_weight"], "VEKT")   # [v1.4.0]
+    # [v2.0.0] the columns are renamed to the v1.3 names; the current MBRN variables (vital status
+    # leve_dodstatus_fodsel, gestational age in weeks) are converted, see uio_source()
+    mbrn = .uio_standardise_mbrn(mbrn, mbrn_var_map)
 
     # [v2.0.0] && (a NULL limit was an error with &), and the birth year is applied only when it is a column
     if(!is.null(source_files$birth_registry$birth_year_limit) && !is.na(source_files$birth_registry$birth_year_limit[1]) &&
@@ -306,6 +304,11 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   npr = unique(npr[(vocab == "ICD-10" & grepl(paste0(c(hospital_codes[vocab=="ICD-10", code],c("O00","O01", "O02", "O03", "O04","O35")), collapse = "|"), tilst, perl = TRUE))])
   kuhr = unique(kuhr[(diagnosekodeverk == "ICD-10" & grepl(paste0(c(primary_care_codes[vocab=="ICD-10", code],c("O00","O01", "O02", "O03", "O04","O35")), collapse = "|"), diagnose, perl = TRUE)) |
                         (diagnosekodeverk == "ICPC-2" & grepl(paste0(c(primary_care_codes[vocab=="ICPC-2", code],"W82"), collapse = "|"), diagnose, perl = TRUE)) ])
+
+  # [v2.0.0] the records used, kept for the description of the pregnancies and the code report (run_uio_pa())
+  uio_capture = list(npr = npr[, .(ID, tilst, inndato)], kuhr = kuhr[, .(ID, diagnose, diagnosekodeverk, ant_dager)],
+                     mbrn = mbrn[, intersect(c("PasientLopeNr_MOR", "DAGER_FDATO", "DODKAT", "SVLEN_DG", "MORS_ALDER", "VEKT"), names(mbrn)), with = FALSE],
+                     weight_used = use_weight)
 
 
   # NPR stay: consecutive records of a woman with the same date; diagno numbers the diagnoses within a stay
@@ -1448,7 +1451,7 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
   early_nonlive_births[, GA_event_days_imput := as.numeric(date_outcome - pr_start_final)]
 
   # Still undated: outcome-specific default length, again not before the previous outcome
-  # [v1.3.1] outcome-specific default lengths are settings (v1.3: 70, 56, 77, 56)
+  # [v1.3.1] outcome-specific default lengths are settings (miscarriage, induced abortion, molar, ectopic)
   # [v1.4.0] a default may be a year table (year of the outcome), and the induced-abortion default may be
   # drawn from a distribution (rows in the current order: ID, date_outcome)
   set_default = function(oc, x){
@@ -1516,5 +1519,6 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
 
   early_nonlive_births = merge(early_nonlive_births, outcome_lables, by = "outcome_final", all.x = TRUE)
 
+  setattr(early_nonlive_births, "uio_capture", uio_capture)   # [v2.0.0] used and removed by run_uio_pa()
   early_nonlive_births
 }

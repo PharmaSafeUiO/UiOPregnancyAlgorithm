@@ -14,11 +14,12 @@ export(uio_source_files)
 export(uio_source)
 export(uio_dates)
 export(uio_project_sources)
+export(uio_mbrn_columns)
 export(uio_hospital_codes)
 export(uio_primary_care_codes)
 
 importFrom(Rcpp, sourceCpp)
-importFrom(data.table, ":=", .GRP, .I, .N, as.data.table, as.IDate, copy, data.table, dcast,
+importFrom(data.table, ":=", .GRP, .I, .N, .SD, as.data.table, as.IDate, copy, data.table, dcast,
            fcase, fifelse, fread, fwrite, rbindlist, rleid, setattr, setkey, setnames,
            setorder, shift)
 importFrom(lubridate, Date, NA_Date_, year, ymd)

@@ -15,7 +15,8 @@ A named list.
 \description{
 \code{uio_default_settings()} returns the named list of settings of \code{\link[=run_uio_pa]{run_uio_pa()}} with their
 default values. The defaults are the settings of the main analysis of the four-algorithm
-comparison (Nordeng, Hayati and van Gelder). \code{uio_v13_settings()} returns the settings that
+comparison (Nordeng, Hayati and van Gelder), with birth weight added to the stillbirth rule
+(the MBRN definition). \code{uio_v13_settings()} returns the settings that
 differ from these defaults in version 1.3 of the algorithm (the R translation of the STATA
 script): \code{run_uio_pa(..., settings = uio_v13_settings())} runs the algorithm with the rules of
 version 1.3.
@@ -42,19 +43,19 @@ is 22+0 weeks. The Norwegian registries' statistics count weeks ordinally (week 
 (\code{DODKAT} 7-9) is a stillbirth; below it, it is a miscarriage. Default \code{154} (22+0 weeks,
 the MBRN definition). \code{NULL} gives the rule of version 1.3: stillbirth if the completed
 weeks \code{floor(SVLEN_DG / 7) > 20}, i.e. from 147 days (21+0 weeks).}
-\item{\code{stillbirth_min_weight_g}}{\code{NULL} (default: birth weight not used) or a birth weight
-in grams, usually \code{500}. The MBRN birth weight (\code{birth_weight} in \code{\link[=uio_source]{uio_source()}};
-column \code{VEKT}) of a fetal death then also decides between stillbirth and miscarriage, as set
-by \code{stillbirth_weight_rule}. Weights of 0 or below count as missing. MBRN records without
-gestational age are dropped whatever the weight, as in version 1.3.}
-\item{\code{stillbirth_weight_rule}}{How birth weight and gestational age are combined when
-\code{stillbirth_min_weight_g} is set:
-\code{"or"} (default): stillbirth if the gestational-age rule says stillbirth \strong{or} the weight is
-at least \code{stillbirth_min_weight_g} (22 weeks or 500 g, the definition of the Norwegian
-Institute of Public Health's statistics);
-\code{"and"}: stillbirth only if the gestational-age rule says stillbirth \strong{and} the weight is at
-least the limit, the gestational-age rule alone when the weight is missing (a fetus born
-before 22 weeks, or below 500 g, is a miscarriage: the MBRN notification guide);
+\item{\code{stillbirth_min_weight_g}}{Birth weight in grams that also decides between stillbirth
+and miscarriage for an MBRN fetal death, as set by \code{stillbirth_weight_rule}. Default \code{500}.
+It is used when the birth weight is mapped (\code{birth_weight} in \code{\link[=uio_source]{uio_source()}}, \code{VEKT} /
+\code{vekt} in the MBRN); otherwise the run says so and uses gestational age alone. \code{NULL} turns
+it off. Weights of 0 or below count as missing. MBRN records without gestational age are
+dropped whatever the weight, as in version 1.3.}
+\item{\code{stillbirth_weight_rule}}{How birth weight and gestational age are combined:
+\code{"and"} (default): stillbirth only if the gestational-age rule says stillbirth \strong{and} the
+weight is at least the limit; the gestational-age rule alone when the weight is missing (a
+fetus born before 22 weeks, or below 500 g, is a miscarriage: the MBRN definition, FHI
+notification guide 2022);
+\code{"or"}: stillbirth if the gestational-age rule says stillbirth \strong{or} the weight is at least
+the limit (22 weeks or 500 g, the definition used in some FHI statistics);
 \code{"weight_first"}: the weight decides when it is recorded, the gestational-age rule when it is
 missing.}
 \item{\code{marker_rejection_days}}{The marker rule for pregnancies that are not dated by the
@@ -76,7 +77,7 @@ an MBRN birth or before or after another non-live outcome. Default \code{56} (8 
 version 1.3.}
 \item{\code{induced_abortion_default_days}}{Pregnancy length of an induced abortion (outcome 3)
 without any dating information (no MBRN gestational age, no accepted marker, no rejected
-marker, no O35 code). Default \code{56} (8+0 weeks). Either one number for all years, or a data
+marker, no O35 code). Default \code{49} (7+0 weeks). Either one number for all years, or a data
 frame with columns \code{year} and \code{days} (one row per year of the outcome) for year-specific
 defaults: a year that is not listed takes the value of the closest earlier listed year, and
 years before the first listed year take the first value.}

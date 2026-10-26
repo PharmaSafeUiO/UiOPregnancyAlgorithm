@@ -141,7 +141,13 @@ run_child("child_run_original.R", list(mode = "run", script = script_syn, workdi
 run_child("child_run_package.R", list(lib = lib, raw_dir = raw_dir, workdir = wd_pkg, empty_dir = empty, out = file.path(tmp, "pkg.rds")), "package_runs")
 orig <- readRDS(file.path(tmp, "orig.rds")); pk <- readRDS(file.path(tmp, "pkg.rds"))
 runs <- lapply(pk$runs, function(x) { x <- copy(x); x })
-strip <- function(x) { x <- copy(x); setattr(x, "settings", NULL); x }
+v13_cols <- c("outcome_final", "ID", "preg_id", "date_outcome", "MC_source", "TOP_source", "pr_start_final", "GA_event_week_final",
+              "GA_event_days_final", "dating_method", "truncated_at_previous_outcome", "outcome_lable")
+strip <- function(x) {          # the columns of v1.3, in one order (2.0.0 adds the description of each pregnancy)
+  x <- copy(x)[, intersect(v13_cols, names(x)), with = FALSE]
+  for (a in c("settings", "code_availability", "uio_capture")) setattr(x, a, NULL)
+  setkey(x, NULL); setorder(x, outcome_final, ID, date_outcome, preg_id); x
+}
 same_dt <- function(a, b) {
   a <- strip(a); b <- strip(b)
   c(all_equal       = isTRUE(all.equal(a, b, check.attributes = TRUE)),
@@ -237,12 +243,12 @@ print(changed_rows(S$b, S$d, "d"))
 cmp_expected(S$d, exp_d, "(d) differs from v1.3 exactly as expected")
 
 exp_e <- modify(expected_b, data.table(
-  ID = c(2L, 3L, 5L, 6L, 9L), date_outcome = c("2016-03-10", "2017-04-20", "2019-05-05", "2019-08-08", "2018-09-09"),
-  outcome = c(2, 2, 2, 2, 2), GA_days = c(150, 84, 70, 70, 74),
-  dating_method = c("MBRN (recorded GA)", "pregnancy marker", "fixed outcome-specific default", "fixed outcome-specific default", "pregnancy marker")))
-cat("\n(e) all defaults of version 2.0.0 (stillbirth from 154 days, marker rule 119 days, normalize_codes = TRUE)\n")
+  ID = c(2L, 3L, 4L, 5L, 6L, 9L), date_outcome = c("2016-03-10", "2017-04-20", "2018-02-14", "2019-05-05", "2019-08-08", "2018-09-09"),
+  outcome = c(2, 2, 3, 2, 2, 2), GA_days = c(150, 84, 49, 70, 70, 74),
+  dating_method = c("MBRN (recorded GA)", "pregnancy marker", "fixed outcome-specific default", "fixed outcome-specific default", "fixed outcome-specific default", "pregnancy marker")))
+cat("\n(e) all defaults of version 2.0.0 (stillbirth from 154 days, marker rule 119 days, induced-abortion default 49 days, normalize_codes = TRUE)\n")
 cat("    expected changes vs v1.3: W2 150-day fetal death -> miscarriage; W3 marker-implied 84 d accepted (< 119);\n",
-    "   W5, W6, W9 through the normalised codes.\n")
+    "   W4 abortion without marker 49 d; W5, W6, W9 through the normalised codes.\n")
 print(changed_rows(S$b, S$e, "e"))
 cmp_expected(S$e, exp_e, "(e) the 2.0.0 defaults differ from v1.3 exactly as expected")
 
@@ -256,7 +262,7 @@ wd_orig_nq <- file.path(tmp, "wd_original_noquads"); dir.create(wd_orig_nq)
 run_child("child_run_package.R", list(lib = lib, raw_dir = raw_dir_nq, workdir = wd_pkg_nq, single = TRUE,
                                       out = file.path(tmp, "pkg_nq.rds")), "package_run_noquads")
 pkg_nq <- readRDS(file.path(tmp, "pkg_nq.rds"))
-cols_np <- setdiff(names(pkg_nq), "preg_id")          # preg_id numbering depends on the rows present
+cols_np <- setdiff(v13_cols, "preg_id")          # preg_id numbering depends on the rows present
 a <- setorder(strip(runs$b)[ID != 17L, ..cols_np], ID, date_outcome)
 b <- setorder(strip(pkg_nq)[, ..cols_np], ID, date_outcome)
 check("package runs without quadruplets; results equal those of the data with quadruplets (W17 and preg_id aside)",
@@ -331,7 +337,7 @@ key_cols <- function(x) {
         pr_start_final = as.Date(pr_start_final), GA_event_days_final, dating_method, truncated_at_previous_outcome)][order(ID, date_outcome)]
 }
 check("P1111 layout via uio_project_sources(\"p1111\") == run (b)", isTRUE(all.equal(key_cols(lay$res$p1111), key_cols(runs$b), check.attributes = FALSE)))
-for (lt in c("p704", "p1380", "generic")) {
+for (lt in c("p704", "p1380", "generic", "new_mbrn")) {
   ok <- isTRUE(all.equal(key_cols(lay$res[[lt]]), key_cols(lay$res$p1111), check.attributes = FALSE))
   check(sprintf("%s layout gives the same pregnancies, outcomes, dates and dating methods as the P1111 layout", lt), ok)
   if (!ok) { cat("observed:\n"); print(key_cols(lay$res[[lt]])); cat("P1111:\n"); print(key_cols(lay$res$p1111)) }
@@ -339,8 +345,48 @@ for (lt in c("p704", "p1380", "generic")) {
 cat("  P704: day offsets from 1997-09-24, NPR with tilstand_1..n, KUHR without sex\n",
     " P1380: MBRN SPSS with text dates (mdy HMS), NPR contact + code files, KUHR .dsv with yyyymmdd\n",
     " generic: MBRN dates dd.mm.yyyy, NPR and KUHR with offsets from a per-woman reference date, sex coded K/M\n")
+cat("  new_mbrn: id_mor, fdato, plurek, svlen_dg, leve_dodstatus_fodsel (1/2/3) instead of DODKAT, mors_alder\n")
+kw <- key_cols(lay$res$new_mbrn_weeks); k1 <- key_cols(lay$res$p1111)
+same_but_ga <- isTRUE(all.equal(kw[, .(ID, date_outcome, outcome_final, dating_method)], k1[, .(ID, date_outcome, outcome_final, dating_method)], check.attributes = FALSE))
+ga_mbrn <- merge(kw[dating_method == "MBRN (recorded GA)", .(ID, date_outcome, gw = GA_event_days_final)],
+                 k1[dating_method == "MBRN (recorded GA)", .(ID, date_outcome, gd = GA_event_days_final)], by = c("ID", "date_outcome"))
+check("svlen (weeks): same pregnancies and outcomes; MBRN gestational age = completed weeks x 7 + 3 days",
+      same_but_ga && nrow(ga_mbrn) > 0 && all(ga_mbrn$gw == (ga_mbrn$gd %/% 7) * 7 + 3))
 cat("  a missing column gives: ", lay$missing_cols, "\n", sep = "")
 check("uio_source_files() reports missing required columns", grepl("lacks the column", lay$missing_cols, fixed = TRUE))
+
+## ---- 10. description of the pregnancies, summary, output folder ------------------------------------------
+cat("\n== 10. description of the pregnancies, printed summary and output folder (run (o), defaults) ==\n")
+o_ <- runs$o
+need <- c("year_outcome", "dating_class", "dating_source", "dating_code", "outcome_source", "outcome_code",
+          "codes_mbrn", "codes_npr", "codes_kuhr", "mother_age")
+check("the result has the description columns", all(need %in% names(o_)))
+print(o_[, .(ID, date_outcome, outcome_lable, GA = GA_event_days_final, dating_class, dating_source, dating_code,
+             outcome_source, outcome_code, codes_npr, codes_kuhr, mother_age)])
+w <- function(id, d) o_[ID == id & as.character(date_outcome) == d]
+check("W2 (MBRN fetal death, 150 days): source MBRN, code DODKAT 7", w(2L, "2016-03-10")$outcome_source == "MBRN" && w(2L, "2016-03-10")$outcome_code == "DODKAT 7")
+check("W4 (NPR O049, no marker): source NPR, code O049, dating default", w(4L, "2018-02-14")$outcome_code == "O049" && w(4L, "2018-02-14")$dating_source == "default")
+check("W7 (O049 with O359): dating source NPR, code O359; episode codes O049, O359",
+      w(7L, "2020-01-15")$dating_code == "O359" && w(7L, "2020-01-15")$codes_npr == "O049, O359")
+check("W8 (KUHR W82, marker W78 15 days before): source KUHR, code W82; dated by KUHR marker W78",
+      w(8L, "2021-03-03")$outcome_source == "KUHR" && w(8L, "2021-03-03")$outcome_code == "W82" &&
+        w(8L, "2021-03-03")$dating_source == "KUHR" && w(8L, "2021-03-03")$dating_code == "W78")
+check("W9 (O03.9 with Z32.1, normalised): dated by NPR marker Z321", w(9L, "2018-09-09")$dating_code == "Z321" && w(9L, "2018-09-09")$dating_source == "NPR")
+check("MBRN pregnancies have the mother's age from the MBRN", all(!is.na(o_[outcome_source == "MBRN", mother_age])))
+check("output folder: rds, outcome and code-availability csv, html report", all(c("uio_pregnancies.rds", "uio_outcomes.csv", "uio_code_availability.csv", "uio_report.html") %in% pk$out_files))
+check("the saved rds equals the returned result", isTRUE(pk$out_rds_equal))
+check("outcome table has all six outcomes (also those with no pregnancies)", nrow(pk$outcomes_csv) == 6 && "Molar pregnancy" %in% pk$outcomes_csv$outcome)
+check("counts 1-4 are masked in the csv files", any(pk$outcomes_csv$n == "<5") && !any(grepl("^[1-4]$", c(pk$outcomes_csv$n, pk$avail_csv$n_records))))
+check("code availability lists the 15 NPR and 21 KUHR markers and the outcome codes",
+      sum(pk$avail_csv$type == "marker" & pk$avail_csv$registry == "NPR") == 15 && sum(pk$avail_csv$type == "marker" & pk$avail_csv$registry == "KUHR") == 21 &&
+        all(c("O00", "O01", "O04", "W82") %in% pk$avail_csv$code))
+check("HTML report has the sections and inline SVG charts, no external resources",
+      all(sapply(c('id="year"', 'id="age"', 'id="ga"', 'id="dating"', 'id="codes"', "<svg"), function(z) any(grepl(z, pk$html, fixed = TRUE)))) &&
+        !any(grepl("https?://(?!doi)", pk$html, perl = TRUE)))
+cat("printed summary:\n"); cat(pk$summary_text, sep = "\n")
+check("printed summary: code availability, then settings, then the outcome table with all six outcomes",
+      {i1 <- grep("Codes available", pk$summary_text); i2 <- grep("== Settings", pk$summary_text); i3 <- grep("Pregnancy outcomes", pk$summary_text)
+       length(i1) && length(i2) && length(i3) && i1 < i2 && i2 < i3 && all(sapply(c("Livebirth", "Molar pregnancy", "Ectopic pregnancy"), function(z) any(grepl(z, pk$summary_text[i3:length(pk$summary_text)]))))})
 
 saveRDS(list(original = orig, package = runs, package_noquads = pkg_nq), file.path(results_dir, "regression_results.rds"))
 cat("\nOVERALL:", if (ok_all) "ALL CHECKS PASSED" else "SOME CHECKS FAILED", "\n")

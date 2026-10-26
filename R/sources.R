@@ -13,10 +13,17 @@
 #' `columns` maps the information the algorithm needs (names) to the column names of the extract
 #' (values). Required:
 #' \describe{
-#'   \item{`birth_registry`}{`mother_id`, `mother_age`, `event_date` (birth date), `child_order`
-#'     (`PLUREK`), `gestational_days` (`SVLEN_DG`), `death_cat` (vital status `DODKAT`), `apgar5`.
-#'     Optional: `birth_year` (used with `birth_year_limit`) and `birth_weight` (grams; read only
-#'     with `stillbirth_min_weight_g`).}
+#'   \item{`birth_registry`}{`mother_id` (`id_mor`), `event_date` (birth date: `fdato`, or the
+#'     project's day difference from a reference date), the vital status as either `death_cat`
+#'     (`DODKAT` / `dodkat`, the old or the 2024 coding) or `vital_status`
+#'     (`leve_dodstatus_fodsel`: 1 live born, 2 stillborn or spontaneous abortion, 3 abortion approved
+#'     by an abortion board), and the gestational age as either `gestational_days` (`SVLEN_DG` /
+#'     `svlen_dg`) or `gestational_weeks` (`svlen`, completed weeks; the middle of the week is used,
+#'     weeks x 7 + 3 days). Optional: `abortion_weeks` (`svlen_abr`, weeks, for abortions approved by
+#'     a board without gestational age), `child_order` (`PLUREK` / `plurek`; else the order in the
+#'     file), `apgar5` (used only for `DODKAT` 13: live birth if above 0), `mother_age`
+#'     (`MORS_ALDER` / `mors_alder`), `birth_weight` (`VEKT` / `vekt`, grams) and `birth_year` (with
+#'     `birth_year_limit`). `uio_mbrn_columns()` gives the names of the current MBRN deliveries.}
 #'   \item{`hospital`}{`mother_id`, `diagnose_code` (ICD-10, e.g. `"O039"` or `"O03.9"`),
 #'     `visit_date`. Optional: `vocabulary` (coding system; all `"ICD-10"` if not given),
 #'     `stay_id`, `gender`, `birth_year`.}
@@ -75,7 +82,7 @@ uio_source <- function(file = NULL, data = NULL, columns, dates = uio_dates(), b
 #' @param birth_registry,hospital,primary_care Extracts defined with `uio_source()`.
 #' @export
 uio_source_files <- function(birth_registry, hospital, primary_care) {
-  need <- list(birth_registry = c("mother_id", "mother_age", "event_date", "child_order", "gestational_days", "death_cat", "apgar5"),
+  need <- list(birth_registry = c("mother_id", "event_date"),
                hospital = c("mother_id", "diagnose_code", "visit_date"),
                primary_care = c("mother_id", "diagnose_code", "vocabulary", "visit_date"))
   src <- list(birth_registry = birth_registry, hospital = hospital, primary_care = primary_care)
@@ -83,7 +90,42 @@ uio_source_files <- function(birth_registry, hospital, primary_care) {
     miss <- setdiff(need[[nm]], names(src[[nm]]$variables))
     if (length(miss)) stop("`", nm, "` lacks the column(s): ", paste(miss, collapse = ", "), call. = FALSE)
   }
+  v <- birth_registry$variables
+  if (!any(c("death_cat", "vital_status") %in% names(v)))
+    stop("`birth_registry` needs the vital status: `death_cat` (DODKAT) or `vital_status` (leve_dodstatus_fodsel).", call. = FALSE)
+  if (!any(c("gestational_days", "gestational_weeks") %in% names(v)))
+    stop("`birth_registry` needs the gestational age: `gestational_days` (svlen_dg) or `gestational_weeks` (svlen).", call. = FALSE)
   src
+}
+
+#' Columns of the current MBRN deliveries
+#'
+#' The variable names of the Medical Birth Registry of Norway in the variable list of helsedata.no
+#' (2025), for the `columns` argument of [uio_source()]. FHI recommends the less identifying
+#' variables (`leve_dodstatus_fodsel` instead of `dodkat`, `svlen` instead of `svlen_dg`, day
+#' differences instead of dates); use the names that the delivery of your project has.
+#'
+#' @param event_date Name of the birth-date column: `"fdato"` (date) or the project's day
+#'   difference from a reference date (then `dates = uio_dates(ref_date = ...)` in [uio_source()]).
+#' @param vital_status `"leve_dodstatus_fodsel"` (default) or `"dodkat"`.
+#' @param gestational_age `"svlen_dg"` (days, default) or `"svlen"` (completed weeks).
+#' @param optional Optional columns to include: `"abortion_weeks"` (`svlen_abr`), `"child_order"`
+#'   (`plurek`), `"apgar5"`, `"mother_age"` (`mors_alder`) and `"birth_weight"` (`vekt`). Default all;
+#'   leave out those that the delivery does not have.
+#' @return A named character vector.
+#' @examples
+#' uio_mbrn_columns()
+#' uio_mbrn_columns(event_date = "fdato_diff", vital_status = "dodkat", gestational_age = "svlen")
+#' @export
+uio_mbrn_columns <- function(event_date = "fdato", vital_status = c("leve_dodstatus_fodsel", "dodkat"),
+                             gestational_age = c("svlen_dg", "svlen"),
+                             optional = c("abortion_weeks", "child_order", "apgar5", "mother_age", "birth_weight")) {
+  vital_status <- match.arg(vital_status); gestational_age <- match.arg(gestational_age)
+  opt <- c(abortion_weeks = "svlen_abr", child_order = "plurek", apgar5 = "apgar5", mother_age = "mors_alder", birth_weight = "vekt")
+  c(mother_id = "id_mor", event_date = event_date,
+    stats::setNames(vital_status, if (vital_status == "dodkat") "death_cat" else "vital_status"),
+    stats::setNames(gestational_age, if (gestational_age == "svlen") "gestational_weeks" else "gestational_days"),
+    opt[intersect(optional, names(opt))])
 }
 
 #' How dates are stored in an extract
@@ -143,8 +185,9 @@ uio_dates <- function(format = NULL, ref_date = NULL, ref_dates = NULL, person_i
 #'     mothers' extracts (`NPR_mor`) with one column per diagnosis (`tilstand_1`, `tilstand_2`, ...);
 #'     KUHR without sex (the extract holds mothers only).}
 #'   \item{P1380}{MBRN as SPSS file with dates as text (`"mdy HMS"`); NPR as contact files with
-#'     separate code files linked by `kobl_nokkel` (SOM and AVTSOM), ICD-10 diagnoses of women, with
-#'     dates; KUHR as tab-separated `.dsv` with dates (`"ymd"`).}
+#'     separate code files linked by `kobl_nokkel` (SOM, AVTSOM, PHBU, PHV, AVTPHV, TSB), ICD-10
+#'     diagnoses of women, with dates; KUHR as tab-separated `.dsv` with dates (`"ymd"`).}
+#' The birth weight (`VEKT`) is mapped in all three.
 #' }
 #' @export
 uio_project_sources <- function(project = c("p1111", "p704", "p1380"), raw_dir = NULL) {
@@ -179,7 +222,7 @@ uio_project_sources <- function(project = c("p1111", "p704", "p1380"), raw_dir =
       birth_registry = list(file = f("PDB 2424_MFRdata_182029_2020.09.csv"), ref_date = d$ref_date,
                             variables = c(mother_id = "PasientLopeNr_MOR", mother_age = "MORS_ALDER", event_date = "DIFF_DAGER_FDATO",
                                           child_order = "PLUREK", gestational_days = "SVLEN_DG", death_cat = "DODKAT", apgar5 = "APGAR5",
-                                          birth_year = "FAAR")),
+                                          birth_year = "FAAR", birth_weight = "VEKT")),
       hospital = list(data = NULL, prepare = "p704", raw_files = c(npr_mor = f("PDB 2424_NPR_20_505_NPR_mor.*")), ref_date = d$ref_date,
                       variables = c(mother_id = "pasientlopenr_MOR", diagnose_code = "tilstand", stay_id = "visit_id",
                                     visit_date = "inndato_diff")),
@@ -191,10 +234,14 @@ uio_project_sources <- function(project = c("p1111", "p704", "p1380"), raw_dir =
     src <- list(
       birth_registry = list(file = f("MBRN/p202274_mfr_2024_11.sav"), date_format = "mdy HMS",
                             variables = c(mother_id = "LOPENR_MOR", mother_age = "MORS_ALDER", event_date = "FDATO", child_order = "PLUREK",
-                                          gestational_days = "SVLEN_DG", death_cat = "DODKAT", apgar5 = "APGAR5")),
+                                          gestational_days = "SVLEN_DG", death_cat = "DODKAT", apgar5 = "APGAR5", birth_weight = "VEKT")),
       hospital = list(data = NULL, prepare = "p1380",
                       raw_files = c(som = f("NPR/SOM/SOM_2018_2023.csv"), som_codes = f("NPR/SOM/SOM_ICD10.csv"),
-                                    avtsom = f("NPR/AVTSOM/AVTSOM_2018_2023.csv"), avtsom_codes = f("NPR/AVTSOM/AVTSOM_koder.csv")),
+                                    avtsom = f("NPR/AVTSOM/AVTSOM_2018_2023.csv"), avtsom_codes = f("NPR/AVTSOM/AVTSOM_koder.csv"),
+                                    phbu = f("NPR/PHBU/PHBU_2018_2023.csv"), phbu_codes = f("NPR/PHBU/PHBU_koder.csv"),
+                                    phv = f("NPR/PHV/PHV_2018_2023.csv"), phv_codes = f("NPR/PHV/PHV_koder.csv"),
+                                    avtphv = f("NPR/AVTPHV/AVTPHV_2018_2023.csv"), avtphv_codes = f("NPR/AVTPHV/AVTPHV_koder.csv"),
+                                    tsb = f("NPR/TSB/TSB_2018_2023.csv"), tsb_codes = f("NPR/TSB/TSB_koder.csv")),
                       variables = c(mother_id = "lopenr", diagnose_code = "kodeverdi", stay_id = "kobl_nokkel", visit_date = "inndato")),
       primary_care = list(file = f("KUHR/.*.dsv"), date_format = "ymd",
                           variables = c(mother_id = "PASIENTLOPENUMMER", diagnose_code = "DIAGNOSE_KODE", vocabulary = "DIAGNOSEKODEVERK",
@@ -379,10 +426,14 @@ uio_prepare_sources <- function(source_files) {
     k[, visit_type := type]
     cd <- fread(npr_files[[codes]])
     names(cd) <- tolower(names(cd))
+    if (!"kodenavn" %in% names(cd)) cd[, kodenavn := "ICD-10"]     # the PHBU code file has no code system (ICD-10)
     cd <- cd[kodenavn == "ICD-10", .(kobl_nokkel, kodeverdi)]
     merge(k, cd, by = "kobl_nokkel", all.x = TRUE)
   }
-  npr0 <- rbindlist(list(part("som", "som_codes", 7, "som"), part("avtsom", "avtsom_codes", 6, "avtsom")))
+  parts <- c(som = 7, avtsom = 6, phbu = 6, phv = 6, avtphv = 6, tsb = 6)          # column of the sex in each contact file
+  miss <- setdiff(c(names(parts), paste0(names(parts), "_codes")), names(npr_files))
+  if (length(miss)) stop("The P1380 NPR needs the files: ", paste(miss, collapse = ", "), call. = FALSE)
+  npr0 <- rbindlist(lapply(names(parts), function(pt) part(pt, paste0(pt, "_codes"), parts[[pt]], pt)))
   setorder(npr0, lopenr, kobl_nokkel, visit_type, inndato, na.last = TRUE)
   setkey(npr0, lopenr, kobl_nokkel, visit_type)
   npr0[, visit_id := .GRP, by = .(lopenr, kobl_nokkel, visit_type)]
@@ -420,4 +471,29 @@ uio_prepare_sources <- function(source_files) {
   out <- data.table(person_id = as.character(d[[spec$person_id]]), ref_date = r)
   if (anyDuplicated(out$person_id)) stop("The reference-date table has more than one row for some women.", call. = FALSE)
   out
+}
+
+# MBRN columns to the names used by the algorithm (internal), and derived columns for the current deliveries:
+# vital status (leve_dodstatus_fodsel) -> DODKAT, gestational weeks -> days, missing optional columns.
+.uio_standardise_mbrn <- function(mbrn, v) {
+  ren <- c(mother_id = "PasientLopeNr_MOR", event_date = "DAGER_FDATO", child_order = "PLUREK", gestational_days = "SVLEN_DG",
+           death_cat = "DODKAT", apgar5 = "APGAR5", mother_age = "MORS_ALDER", birth_weight = "VEKT",
+           vital_status = "LEVE_DODSTATUS_FODSEL", gestational_weeks = "SVLEN", abortion_weeks = "SVLEN_ABR")
+  for (r in intersect(names(ren), names(v))) {
+    if (v[[r]] %in% names(mbrn)) setnames(mbrn, v[[r]], ren[[r]])
+    else if (r %in% c("mother_id", "event_date", "gestational_days", "gestational_weeks", "death_cat", "vital_status"))
+      stop("The MBRN has no column ", v[[r]], " (", r, ").", call. = FALSE)
+    else cli::cli_alert_warning("The MBRN has no column {v[[r]]} ({r}); it is not used.")
+  }
+  if (!"SVLEN_DG" %in% names(mbrn)) mbrn[, SVLEN_DG := as.numeric(SVLEN) * 7 + 3]               # middle of the completed week
+  if ("SVLEN_ABR" %in% names(mbrn)) mbrn[is.na(SVLEN_DG) & !is.na(SVLEN_ABR), SVLEN_DG := as.numeric(SVLEN_ABR) * 7 + 3]
+  if (!"DODKAT" %in% names(mbrn))
+    mbrn[, DODKAT := data.table::fcase(as.character(LEVE_DODSTATUS_FODSEL) == "1", 0L,   # live born
+                                       as.character(LEVE_DODSTATUS_FODSEL) == "2", 7L,   # stillborn or spontaneous abortion
+                                       as.character(LEVE_DODSTATUS_FODSEL) == "3", 10L,  # abortion approved by a board
+                                       default = NA_integer_)]
+  if (!"APGAR5" %in% names(mbrn)) mbrn[, APGAR5 := NA_character_]
+  if (!"MORS_ALDER" %in% names(mbrn)) mbrn[, MORS_ALDER := NA_real_]
+  if (!"PLUREK" %in% names(mbrn)) mbrn[, PLUREK := seq_len(.N), by = .(PasientLopeNr_MOR, DAGER_FDATO)]
+  mbrn
 }

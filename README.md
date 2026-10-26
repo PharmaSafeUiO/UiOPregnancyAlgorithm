@@ -38,14 +38,35 @@ src <- uio_project_sources("p1111")                          # the registry extr
 res <- run_uio_pa(workdir = "N:/durable/work/uio",           # an existing folder for the cached extracts
                   source_files = src)
 
-res[, .N, by = outcome_lable]
-attr(res, "settings")                                        # the settings used
 ```
 
-`res` has one row per pregnancy: the woman (`ID`), the outcome (`outcome_final`,
-`outcome_lable`), the outcome date (`date_outcome`), the start (`pr_start_final`), the
-gestational age at the outcome (`GA_event_days_final`, `GA_event_week_final`), how the pregnancy
-was dated (`dating_method`) and the data sources (`MC_source`, `TOP_source`). See `?run_uio_pa`.
+At the end of the run a summary is printed: which pregnancy codes are found in NPR and KUHR (with
+each marker's days to the start), the settings, and the number of pregnancies of each outcome.
+The results are saved in `workdir/output` (choose another folder with `output_dir`):
+
+| File | Content |
+|---|---|
+| `uio_pregnancies.rds` | the pregnancies (also returned by `run_uio_pa()`) |
+| `uio_report.html` | report: outcomes, by year, by the woman's age, gestational age per outcome, dating, sources, codes, settings |
+| `uio_outcomes.csv` | number of pregnancies and gestational age per outcome |
+| `uio_code_availability.csv` | records and women for each pregnancy marker and outcome code in NPR and KUHR |
+
+In the report and the CSV files, counts of 1–4 are shown as `<5`, so they can be exported from TSD.
+
+Each pregnancy has:
+
+| Column | Content |
+|---|---|
+| `ID`, `preg_id` | the woman and the pregnancy |
+| `outcome_final`, `outcome_lable` | 1 live birth, 2 miscarriage, 3 induced abortion, 4 stillbirth, 5 molar, 6 ectopic pregnancy |
+| `date_outcome`, `year_outcome`, `pr_start_final` | outcome date and start (day 0) |
+| `GA_event_days_final`, `GA_event_week_final` | gestational age at the outcome, days and completed weeks |
+| `dating_class` | `recorded` (MBRN), `estimated` (pregnancy marker) or `fixed` (default length, marker limit, O35 rule) |
+| `dating_method`, `dating_source`, `dating_code` | how the start was set, from which registry, and the marker or O35 code |
+| `outcome_source`, `outcome_code` | the registry that decided the outcome (MBRN, then NPR, then KUHR) and its code (`DODKAT 7`, `O039`, `W82`) |
+| `codes_mbrn`, `codes_npr`, `codes_kuhr` | all pregnancy codes of the episode in each registry |
+| `MC_source`, `TOP_source` | registries that recorded a miscarriage / an induced abortion |
+| `mother_age` | the woman's age at the outcome |
 
 ## Time conventions
 
@@ -53,24 +74,25 @@ was dated (`dating_method`) and the data sources (`MC_source`, `TOP_source`). Se
   `GA_event_days_final = date_outcome - pr_start_final`, in days.
 * Completed weeks are `floor(days / 7)`: day 154 is 22+0 weeks.
 * The Norwegian registries' statistics count weeks *ordinally* (week *n* = days 7(*n*−1) to
-  7*n*−1). A pregnancy of 56 days (8+0 weeks) is therefore in "week 9", and "before week 9" means
+  7*n*−1). A pregnancy of 49 days (7+0 weeks) is therefore in "week 8", and "before week 9" means
   55 days or fewer.
 * "Within *d* days before the outcome" includes both the outcome date and the date *d* days before.
 
 ## Settings
 
 Every rule that has a number is an argument of `run_uio_pa()`. The defaults are the settings of
-the main analysis of the four-algorithm comparison. `?uio_default_settings` describes each one.
+the main analysis of the four-algorithm comparison, with birth weight added to the stillbirth rule
+(the MBRN definition). `?uio_default_settings` describes each one.
 
 | Argument | Default | Meaning |
 |---|---|---|
 | `stillbirth_min_days` | `154` | an MBRN fetal death from this gestational age (days) is a stillbirth, below it a miscarriage (154 = 22+0 weeks, the MBRN definition); `NULL` = rule of version 1.3 (completed weeks > 20, i.e. from 147 days) |
-| `stillbirth_min_weight_g` | `NULL` | birth weight (g) that also decides stillbirth vs miscarriage, usually `500` |
-| `stillbirth_weight_rule` | `"or"` | `"or"`: 22 weeks **or** 500 g; `"and"`: 22 weeks **and** 500 g (weight missing: weeks only); `"weight_first"`: weight when recorded, else weeks |
+| `stillbirth_min_weight_g` | `500` | birth weight (g) that also decides stillbirth vs miscarriage; used when the birth weight is mapped, `NULL` turns it off |
+| `stillbirth_weight_rule` | `"and"` | `"and"`: 22 weeks **and** 500 g, weeks only when the weight is missing (the MBRN definition); `"or"`: 22 weeks **or** 500 g; `"weight_first"`: weight when recorded, else weeks |
 | `marker_rejection_days` | `119` | a marker-based estimate of 119 days (17 weeks) or more is rejected and the next marker tried; if all are rejected the pregnancy gets 119 days |
 | `marker_lookback_days` | `70` | markers are searched from this many days before the outcome |
 | `same_event_days` | `56` | records less than 56 days apart are the same event (repeated contacts for one miscarriage or abortion; records shortly after a birth) |
-| `induced_abortion_default_days` | `56` | length of an induced abortion without dating information (8+0 weeks); one number or a table by year |
+| `induced_abortion_default_days` | `49` | length of an induced abortion without dating information (7+0 weeks); one number or a table by year |
 | `miscarriage_default_days` | `70` | idem, miscarriage (10+0 weeks) |
 | `molar_default_days` | `77` | idem, molar pregnancy (11+0 weeks) |
 | `ectopic_default_days` | `56` | idem, ectopic pregnancy (8+0 weeks) |
@@ -82,8 +104,7 @@ the main analysis of the four-algorithm comparison. `?uio_default_settings` desc
 
 ```r
 # sensitivity analyses
-run_uio_pa(workdir = wd, source_files = src, induced_abortion_default_days = 49)
-run_uio_pa(workdir = wd, source_files = src, stillbirth_min_weight_g = 500, stillbirth_weight_rule = "and")
+run_uio_pa(workdir = wd, source_files = src, stillbirth_min_weight_g = NULL)    # gestational age only
 ```
 
 ## Pregnancy markers
@@ -106,7 +127,7 @@ One line. The file names, columns and date forms of these projects are built in:
 ```r
 src <- uio_project_sources("p1111")   # MBRN, NPR (7 extracts), KUHR; day offsets from 25 Dec 1975
 src <- uio_project_sources("p704")    # MBRN, NPR_mor (tilstand_1, ...), KUHR; day offsets from 24 Sep 1997
-src <- uio_project_sources("p1380")   # MBRN (.sav), NPR (contact + code files), KUHR (.dsv); real dates
+src <- uio_project_sources("p1380")   # MBRN (.sav), NPR (6 contact + code files), KUHR (.dsv); real dates
 
 res <- run_uio_pa(workdir = "N:/durable/<your folder>/uio", source_files = src)
 ```
@@ -133,6 +154,27 @@ src <- uio_source_files(
                 visit_date = "DATO", gender = "KJONN"),
     dates = uio_dates()))
 ```
+
+#### The MBRN in current deliveries
+
+FHI now delivers the MBRN with lower-case names and recommends less identifying variables: the vital
+status `leve_dodstatus_fodsel` (1 live born, 2 stillborn or spontaneous abortion, 3 abortion approved
+by a board) instead of `dodkat`, and the gestational age in completed weeks `svlen` instead of
+`svlen_dg` (days). `uio_mbrn_columns()` gives these names; keep those your delivery has:
+
+```r
+mbrn <- uio_source("N:/durable/data/mfr.csv",
+  columns = uio_mbrn_columns(event_date = "fdato",                 # or the project's day difference
+                             vital_status = "leve_dodstatus_fodsel", # or "dodkat"
+                             gestational_age = "svlen_dg",           # or "svlen" (weeks)
+                             optional = c("child_order", "mother_age", "birth_weight")))
+```
+
+With `svlen`, the gestational age is the middle of the completed week (weeks × 7 + 3 days). With
+`dodkat`, both the old coding and the coding of 2024 work (live born 0–4, earlier also 5, 6, 11, 12;
+stillborn 7–9; abortion approved by a board 10).
+
+#### Dates
 
 Dates can be stored in three ways, and each extract can use its own:
 

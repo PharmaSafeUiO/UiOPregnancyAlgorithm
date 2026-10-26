@@ -8,7 +8,8 @@ library(UiOPregnancyAlgorithm, lib.loc = p$lib)
 v13 <- uio_v13_settings()
 ref0 <- as.Date("2004-01-01") - 10234                           # reference date of the P1111 layout
 wd <- function(tag) { d <- file.path(p$tmp, paste0("wd_layout_", tag)); dir.create(d, showWarnings = FALSE); d }
-run <- function(tag, src) run_uio_pa(workdir = wd(tag), source_files = src, settings = v13, years_range = c(2008, 2023))
+run <- function(tag, src) run_uio_pa(workdir = wd(tag), source_files = src, settings = v13, years_range = c(2008, 2023),
+                                    output_dir = NULL, verbose = FALSE)
 
 ## P1111 layout (the reference); its prepared NPR table is reused below
 res <- list(p1111 = run("p1111", uio_project_sources("p1111", raw_dir = p$raw_dir)))
@@ -30,21 +31,25 @@ fwrite(kuhr[PASIENT_KJONN == 2, .(pasientlopenr_MOR = PasientLopeNr_PDB2774, dia
        file.path(r704, "PDB 2424_1 Data fra KUHR 2020.csv"))
 res$p704 <- run("p704", uio_project_sources("p704", raw_dir = r704))
 
-## P1380 layout: MBRN as SPSS with text dates ("mdy HMS"); NPR as contact files (sex in column 7 / 6) and code
-## files; KUHR tab-separated with dates as yyyymmdd. All NPR diagnoses go to SOM, except AVTSOM's own.
-r1380 <- file.path(p$tmp, "raw_p1380"); for (d in c("MBRN", "NPR/SOM", "NPR/AVTSOM", "KUHR")) dir.create(file.path(r1380, d), recursive = TRUE, showWarnings = FALSE)
+## P1380 layout: MBRN as SPSS with text dates ("mdy HMS"); NPR as six contact files (sex in column 7 in SOM, 6 in the
+## others) with code files (the PHBU code file has no code-system column); KUHR tab-separated with dates as yyyymmdd.
+## The seven P1111 NPR parts are spread over the six P1380 parts.
+parts <- c(SOM = "som", AVTSOM = "avtsom", PHBU = "phbu", PHV = "phv", AVTPHV = "avtphv", TSB = "tsb")
+r1380 <- file.path(p$tmp, "raw_p1380"); for (d in c("MBRN", paste0("NPR/", names(parts)), "KUHR")) dir.create(file.path(r1380, d), recursive = TRUE, showWarnings = FALSE)
 haven::write_sav(as.data.frame(mbrn[, .(LOPENR_MOR = MOR_PasientLopeNr_PDB2774, MORS_ALDER,
-                                        FDATO = format(ref0 + FDATO_DIFF, "%m/%d/%Y 00:00:00"), PLUREK, SVLEN_DG, DODKAT, APGAR5)]),
+                                        FDATO = format(ref0 + FDATO_DIFF, "%m/%d/%Y 00:00:00"), PLUREK, SVLEN_DG, DODKAT, APGAR5, VEKT)]),
                  file.path(r1380, "MBRN", "p202274_mfr_2024_11.sav"))
-n2 <- copy(npr)[, inndato := ref0 + diffdato][, part := fifelse(visit_type == "avtsom", "avtsom", "som")]
-for (pt in c("som", "avtsom")) {
+to1380 <- c(som = "som", avtsom = "avtsom", asp = "phbu", bup = "phv", phv = "avtphv", reh = "tsb", tsb = "tsb")
+n2 <- copy(npr)[, inndato := ref0 + diffdato][, part := unname(to1380[visit_type])]
+for (up in names(parts)) {
+  pt <- parts[[up]]
   x <- unique(n2[part == pt, .(kobl_nokkel = visit_id, lopenr = lopeNr_1_PasientLopeNr_PDB2774, inndato)])
   x <- if (pt == "som") x[, .(kobl_nokkel, lopenr, inndato, a = 1L, b = 1L, c = 1L, kjonn = 2L)] else
     x[, .(kobl_nokkel, lopenr, inndato, a = 1L, b = 1L, kjonn = 2L)]
-  up <- toupper(pt)
   fwrite(x, file.path(r1380, "NPR", up, paste0(up, "_2018_2023.csv")))
-  fwrite(n2[part == pt, .(kobl_nokkel = visit_id, kodenavn = "ICD-10", kodeverdi = KodeVerdi)],
-         file.path(r1380, "NPR", up, if (pt == "som") "SOM_ICD10.csv" else "AVTSOM_koder.csv"))
+  cd <- n2[part == pt, .(kobl_nokkel = visit_id, kodenavn = "ICD-10", kodeverdi = KodeVerdi)]
+  if (pt == "phbu") cd[, kodenavn := NULL]
+  fwrite(cd, file.path(r1380, "NPR", up, if (pt == "som") "SOM_ICD10.csv" else paste0(up, "_koder.csv")))
 }
 fwrite(kuhr[, .(PASIENTLOPENUMMER = PasientLopeNr_PDB2774, DIAGNOSE_KODE, DIAGNOSEKODEVERK,
                 DATO = format(ref0 + DIFFERANSEDAGER, "%Y%m%d"), PASIENT_KJONN)], file.path(r1380, "KUHR", "kuhr_2024.dsv"), sep = "\t")
@@ -76,6 +81,19 @@ src_g <- uio_source_files(
     columns = c(mother_id = "ID", diagnose_code = "DIAGNOSE", vocabulary = "KODEVERK", visit_date = "DAGER", gender = "KJONN"),
     dates = ref, female_value = "K"))
 res$generic <- run("generic", src_g)
+
+## Current MBRN variables (helsedata.no): leve_dodstatus_fodsel instead of DODKAT, plurek, svlen_dg, vekt, id_mor, fdato;
+## the result must equal the P1111 layout. A second version has svlen (completed weeks) instead of svlen_dg.
+rn <- file.path(p$tmp, "raw_new_mbrn"); dir.create(rn, showWarnings = FALSE)
+lev <- function(dk) ifelse(dk %in% c(0:6, 11:13), "1", ifelse(dk %in% 7:9, "2", ifelse(dk == 10, "3", NA)))
+fwrite(mbrn[, .(id_mor = MOR_PasientLopeNr_PDB2774, fdato = ref0 + FDATO_DIFF, plurek = PLUREK, svlen_dg = SVLEN_DG,
+                svlen = SVLEN_DG %/% 7, leve_dodstatus_fodsel = lev(DODKAT), mors_alder = MORS_ALDER, vekt = VEKT)], file.path(rn, "mfr.csv"))
+src_n <- src_g
+src_n$birth_registry <- uio_source(file.path(rn, "mfr.csv"), columns = uio_mbrn_columns(optional = c("child_order", "mother_age")))
+res$new_mbrn <- run("new_mbrn", src_n)
+src_w <- src_g
+src_w$birth_registry <- uio_source(file.path(rn, "mfr.csv"), columns = uio_mbrn_columns(gestational_age = "svlen", optional = c("child_order", "mother_age")))
+res$new_mbrn_weeks <- run("new_mbrn_weeks", src_w)
 missing_cols <- tryCatch(uio_source_files(birth_registry = src_g$birth_registry, hospital = uio_source("x.csv", columns = c(mother_id = "ID")),
                                           primary_care = src_g$primary_care), error = function(e) conditionMessage(e))
 saveRDS(list(res = res, missing_cols = missing_cols), p$out)

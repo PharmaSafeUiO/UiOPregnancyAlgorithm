@@ -11,12 +11,12 @@ run_uio_pa(
   primary_care_codes = uio_primary_care_codes(),
   years_range = c(2008, 2023),
   stillbirth_min_days = 154,
-  stillbirth_min_weight_g = NULL,
-  stillbirth_weight_rule = "or",
+  stillbirth_min_weight_g = 500,
+  stillbirth_weight_rule = "and",
   marker_rejection_days = 119,
   marker_lookback_days = 70,
   same_event_days = 56,
-  induced_abortion_default_days = 56,
+  induced_abortion_default_days = 49,
   miscarriage_default_days = 70,
   molar_default_days = 77,
   ectopic_default_days = 56,
@@ -25,7 +25,11 @@ run_uio_pa(
   induced_abortion_default_distribution = NULL,
   random_seed = 1,
   normalize_codes = TRUE,
-  settings = NULL
+  settings = NULL,
+  output_dir = file.path(workdir, "output"),
+  report = TRUE,
+  mask_below = 5,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -45,11 +49,11 @@ used (MBRN births after \code{last_year} are kept). Default \code{c(2008, 2023)}
 \item{stillbirth_min_days}{Gestational age in days from which an MBRN fetal death is a
 stillbirth. Default \code{154} (22+0 weeks); \code{NULL} = version 1.3 rule (from 147 days).}
 
-\item{stillbirth_min_weight_g}{\code{NULL} (default) or a birth weight in grams (usually \code{500}) that
-also decides between stillbirth and miscarriage.}
+\item{stillbirth_min_weight_g}{Birth weight in grams that also decides between stillbirth and
+miscarriage. Default \code{500}; used when the birth weight is mapped, \code{NULL} turns it off.}
 
-\item{stillbirth_weight_rule}{\code{"or"} (default), \code{"and"} or \code{"weight_first"}: how the weight and
-the gestational-age rule are combined.}
+\item{stillbirth_weight_rule}{\code{"and"} (default: 22 weeks and 500 g, the MBRN definition), \code{"or"}
+or \code{"weight_first"}: how the weight and the gestational-age rule are combined.}
 
 \item{marker_rejection_days}{A marker is used only within this many days before the outcome,
 and a marker-implied length of this many days or more is rejected; if all markers are
@@ -60,7 +64,7 @@ Default \code{70}.}
 
 \item{same_event_days}{Records less than this many days apart are the same event. Default \code{56}.}
 
-\item{induced_abortion_default_days, miscarriage_default_days, molar_default_days, ectopic_default_days}{Pregnancy length in days when nothing else dates the pregnancy. Defaults \code{56}, \code{70}, \code{77},
+\item{induced_abortion_default_days, miscarriage_default_days, molar_default_days, ectopic_default_days}{Pregnancy length in days when nothing else dates the pregnancy. Defaults \code{49}, \code{70}, \code{77},
 \code{56}. One number, or a data frame with columns \code{year} and \code{days}.}
 
 \item{o35_induced_days}{Length of an induced abortion with an O35 code. Default \code{80}.}
@@ -78,18 +82,41 @@ drawn.}
 matching. Default \code{TRUE}.}
 
 \item{settings}{\code{NULL} or a named list of settings (names as the arguments above).}
+
+\item{output_dir}{Folder for the results (created if needed): \code{uio_pregnancies.rds},
+\code{uio_outcomes.csv}, \code{uio_code_availability.csv} and \code{uio_report.html}. Default
+\code{file.path(workdir, "output")}; \code{NULL} writes nothing.}
+
+\item{report}{Write the HTML report. Default \code{TRUE}.}
+
+\item{mask_below}{In the CSV files and the report, counts from 1 to \code{mask_below - 1} are shown
+as \code{"<5"} (default \code{5}), so that they can be exported from TSD. \code{0} shows all counts.}
+
+\item{verbose}{Print the summary at the end of the run. Default \code{TRUE}.}
 }
 \value{
 A \code{data.table}, one row per pregnancy:
 \describe{
-\item{\code{outcome_final}, \code{outcome_lable}}{1 Livebirth, 2 Miscarriage, 3 Termination of
-pregnancy (induced abortion), 4 Stillbirth, 5 Molar pregnancy, 6 Ectopic pregnancy.}
 \item{\code{ID}}{The woman's ID (the mother ID of the source files).}
 \item{\code{preg_id}}{Pregnancy number (internal).}
-\item{\code{date_outcome}}{Date of the outcome (MBRN birth date, or the first record of the event).}
+\item{\code{outcome_final}, \code{outcome_lable}}{1 Livebirth, 2 Miscarriage, 3 Termination of
+pregnancy (induced abortion), 4 Stillbirth, 5 Molar pregnancy, 6 Ectopic pregnancy.}
+\item{\code{date_outcome}, \code{year_outcome}}{Date (and year) of the outcome: the MBRN birth date, or
+the first record of the event.}
 \item{\code{pr_start_final}}{Start of the pregnancy (day 0).}
 \item{\code{GA_event_days_final}, \code{GA_event_week_final}}{Gestational age at the outcome in days and
 in completed weeks.}
+\item{\code{dating_class}}{\code{"recorded"} (MBRN gestational age), \code{"estimated"} (pregnancy marker) or
+\code{"fixed"} (default length, marker limit or O35 rule).}
+\item{\code{dating_source}, \code{dating_code}}{Where the start came from (\code{"MBRN"}, \code{"NPR"}, \code{"KUHR"},
+\code{"default"}) and the marker or O35 code that set it.}
+\item{\code{outcome_source}, \code{outcome_code}}{The registry that decided the outcome (MBRN before NPR
+before KUHR) and its code on the outcome date (\code{"DODKAT 7"}, \code{"O039"}, \code{"W82"}, ...).}
+\item{\code{codes_mbrn}, \code{codes_npr}, \code{codes_kuhr}}{All pregnancy codes of the episode in each
+source: the MBRN vital status of the children, and the NPR and KUHR outcome, O35 and marker
+codes recorded from the start up to \code{same_event_days - 1} days after the outcome.}
+\item{\code{mother_age}}{The woman's age at the outcome: from the MBRN at the birth, otherwise from
+her birth year estimated from her MBRN records (\code{NA} without an MBRN record).}
 \item{\code{MC_source}}{Sources of a miscarriage: 1 MBRN+NPR+KUHR, 2 MBRN+NPR, 3 MBRN+KUHR, 4 MBRN,
 5 NPR+KUHR, 6 NPR, 7 KUHR.}
 \item{\code{TOP_source}}{Sources of an induced abortion: 2 MBRN+NPR, 4 MBRN, 6 NPR.}
@@ -100,7 +127,8 @@ in completed weeks.}
 \item{\code{truncated_at_previous_outcome}}{\code{TRUE} if the start was moved to the woman's previous
 outcome date.}
 }
-The complete settings used are attached as \code{attr(result, "settings")}.
+The complete settings used are attached as \code{attr(result, "settings")}, and the code availability
+as \code{attr(result, "code_availability")}.
 }
 \description{
 Identifies pregnancies, their outcomes and their start dates in the Medical Birth Registry of
@@ -146,8 +174,8 @@ before the woman's previous outcome is moved to that outcome date
 
 The start date is \strong{day 0}; the gestational age at the outcome is
 \code{GA_event_days_final = date_outcome - pr_start_final} (days) and
-\code{GA_event_week_final = floor(GA_event_days_final / 7)} (completed weeks). A default of 56 days
-therefore puts the outcome at 8+0 weeks, which the Norwegian registries count as week 9
+\code{GA_event_week_final = floor(GA_event_days_final / 7)} (completed weeks). A default of 49 days
+therefore puts the outcome at 7+0 weeks, which the Norwegian registries count as week 8
 (ordinal weeks: week \code{n} = days \code{7(n-1)} to \verb{7n-1}). All windows are in whole days; "within
 \code{d} days before the outcome" includes the outcome date and the day \code{d} days before it.
 }
@@ -173,6 +201,16 @@ Three small C++ helpers are compiled with \code{\link[Rcpp:sourceCpp]{Rcpp::sour
 C++ compiler is needed at run time (Rtools on Windows).
 }
 
+\section{Summary and output folder}{
+
+At the end of the run the summary is printed: the availability of the codes in NPR and KUHR
+(records and women for each pregnancy marker, with its days to the start, and for each outcome
+code), the settings, and the number of pregnancies of each outcome (all six, also those with
+none) with the median gestational age. The output folder receives the pregnancies (\code{.rds}), the
+outcome table and the code availability (\code{.csv}) and an HTML report with the results by year,
+by the woman's age, the gestational age per outcome, the dating and the sources.
+}
+
 \examples{
 \dontrun{
 library(UiOPregnancyAlgorithm)
@@ -182,10 +220,8 @@ src <- uio_project_sources("p1111")
 res <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src)
 
 # sensitivity analyses
-res49 <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
-                    induced_abortion_default_days = 49)
-res_w <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
-                    stillbirth_min_weight_g = 500, stillbirth_weight_rule = "and")
+res_ga <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
+                     stillbirth_min_weight_g = NULL)    # stillbirth by gestational age only
 
 # version 1.3
 res13 <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,

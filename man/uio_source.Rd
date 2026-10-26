@@ -69,8 +69,9 @@ in PHV, REH and TSB).}
 mothers' extracts (\code{NPR_mor}) with one column per diagnosis (\code{tilstand_1}, \code{tilstand_2}, ...);
 KUHR without sex (the extract holds mothers only).}
 \item{P1380}{MBRN as SPSS file with dates as text (\code{"mdy HMS"}); NPR as contact files with
-separate code files linked by \code{kobl_nokkel} (SOM and AVTSOM), ICD-10 diagnoses of women, with
-dates; KUHR as tab-separated \code{.dsv} with dates (\code{"ymd"}).}
+separate code files linked by \code{kobl_nokkel} (SOM, AVTSOM, PHBU, PHV, AVTPHV, TSB), ICD-10
+diagnoses of women, with dates; KUHR as tab-separated \code{.dsv} with dates (\code{"ymd"}).}
+The birth weight (\code{VEKT}) is mapped in all three.
 }
 }
 \section{Columns}{
@@ -78,10 +79,17 @@ dates; KUHR as tab-separated \code{.dsv} with dates (\code{"ymd"}).}
 \code{columns} maps the information the algorithm needs (names) to the column names of the extract
 (values). Required:
 \describe{
-\item{\code{birth_registry}}{\code{mother_id}, \code{mother_age}, \code{event_date} (birth date), \code{child_order}
-(\code{PLUREK}), \code{gestational_days} (\code{SVLEN_DG}), \code{death_cat} (vital status \code{DODKAT}), \code{apgar5}.
-Optional: \code{birth_year} (used with \code{birth_year_limit}) and \code{birth_weight} (grams; read only
-with \code{stillbirth_min_weight_g}).}
+\item{\code{birth_registry}}{\code{mother_id} (\code{id_mor}), \code{event_date} (birth date: \code{fdato}, or the
+project's day difference from a reference date), the vital status as either \code{death_cat}
+(\code{DODKAT} / \code{dodkat}, the old or the 2024 coding) or \code{vital_status}
+(\code{leve_dodstatus_fodsel}: 1 live born, 2 stillborn or spontaneous abortion, 3 abortion approved
+by an abortion board), and the gestational age as either \code{gestational_days} (\code{SVLEN_DG} /
+\code{svlen_dg}) or \code{gestational_weeks} (\code{svlen}, completed weeks; the middle of the week is used,
+weeks x 7 + 3 days). Optional: \code{abortion_weeks} (\code{svlen_abr}, weeks, for abortions approved by
+a board without gestational age), \code{child_order} (\code{PLUREK} / \code{plurek}; else the order in the
+file), \code{apgar5} (used only for \code{DODKAT} 13: live birth if above 0), \code{mother_age}
+(\code{MORS_ALDER} / \code{mors_alder}), \code{birth_weight} (\code{VEKT} / \code{vekt}, grams) and \code{birth_year} (with
+\code{birth_year_limit}). \code{uio_mbrn_columns()} gives the names of the current MBRN deliveries.}
 \item{\code{hospital}}{\code{mother_id}, \code{diagnose_code} (ICD-10, e.g. \code{"O039"} or \code{"O03.9"}),
 \code{visit_date}. Optional: \code{vocabulary} (coding system; all \code{"ICD-10"} if not given),
 \code{stay_id}, \code{gender}, \code{birth_year}.}
