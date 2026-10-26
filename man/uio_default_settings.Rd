@@ -43,7 +43,7 @@ is 22+0 weeks. The Norwegian registries' statistics count weeks ordinally (week 
 the MBRN definition). \code{NULL} gives the rule of version 1.3: stillbirth if the completed
 weeks \code{floor(SVLEN_DG / 7) > 20}, i.e. from 147 days (21+0 weeks).}
 \item{\code{stillbirth_min_weight_g}}{\code{NULL} (default: birth weight not used) or a birth weight
-in grams, usually \code{500}. The MBRN birth weight (\code{birth_weight} in \code{\link[=uio_source_files]{uio_source_files()}},
+in grams, usually \code{500}. The MBRN birth weight (\code{birth_weight} in \code{\link[=uio_source]{uio_source()}};
 column \code{VEKT}) of a fetal death then also decides between stillbirth and miscarriage, as set
 by \code{stillbirth_weight_rule}. Weights of 0 or below count as missing. MBRN records without
 gestational age are dropped whatever the weight, as in version 1.3.}

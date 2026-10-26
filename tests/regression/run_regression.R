@@ -8,7 +8,7 @@
 ##
 ## Checks
 ##  1. the package resolves every free symbol to the same package as the script does
-##  2. uio_source_files(), uio_hospital_codes(), uio_primary_care_codes() equal the v1.3 objects
+##  2. uio_project_sources("p1111"), uio_hospital_codes(), uio_primary_care_codes() equal the v1.3 objects
 ##  3. original v1.3 (sys.source, as run_uio.R) == package with uio_v13_settings() (identical data.table)
 ##  4. package rerun from the cached CSV files == first run; settings never change the cache;
 ##     the working directory is restored (also after an error)
@@ -80,6 +80,11 @@ for (part in c("detect", "prepare")) {
   o_p_eff[use_q] <- q_p[found[use_q]]
   if (any(use_q)) cat("  called qualified in the package:", paste0(q_p[found[use_q]], "::", found[use_q]), "\n")
   mism <- found[is.na(o_p_eff) | o_s[found] != o_p_eff]
+  # [v2.0.0] sample(), sort() and table() were used only by the v1.3 guessing of text-date formats, replaced by
+  # lubridate::parse_date_time() (dates of the P1111 extracts are day offsets, so that code did not run there)
+  gone <- if (part == "detect") intersect(mism, c("sample", "sort", "table")) else character(0)
+  if (length(gone)) cat("  no longer used (v1.3 text-date guessing):", gone, "\n")
+  mism <- setdiff(mism, gone)
   nonbase <- found[o_s[found] != "base"]
   cat(sprintf("%s: %d free symbols resolve to functions/objects in the script; non-base ones: %s\n", part,
               length(found), paste(sprintf("%s(%s)", nonbase, o_s[nonbase]), collapse = " ")))
@@ -92,19 +97,19 @@ for (part in c("detect", "prepare")) {
 }
 
 ## ---- 2. source definitions and marker lists -----------------------------------------------------
-cat("\n== 2. uio_source_files() / marker lists versus the v1.3 top-level objects ==\n")
+cat("\n== 2. uio_project_sources(\"p1111\") / marker lists versus the v1.3 top-level objects ==\n")
 wd_obj <- file.path(tmp, "wd_objects"); dir.create(wd_obj)
 writeLines("x", file.path(wd_obj, "npr_mothers_full.csv")); writeLines("x", file.path(wd_obj, "hospital_full.csv"))  # dummies: nothing is read
 run_child("child_run_original.R", list(mode = "objects", script = script, workdir = wd_obj, out = file.path(tmp, "orig_objects.rds")), "original_objects")
 oo <- readRDS(file.path(tmp, "orig_objects.rds"))
-src_p <- uio_source_files()
+src_p <- uio_project_sources("p1111")
 br_p <- src_p$birth_registry; br_p$variables <- br_p$variables[names(br_p$variables) != "birth_weight"]
 check("birth_registry element identical (apart from the birth_weight variable added in 1.4.0)", identical(oo$source_files$birth_registry, br_p))
 check("birth_weight variable is VEKT", identical(unname(src_p$birth_registry$variables["birth_weight"]), "VEKT"))
 check("primary_care element identical", identical(oo$source_files$primary_care, src_p$primary_care))
-h_o <- oo$source_files$hospital; h_o$data <- NULL
-h_p <- src_p$hospital; h_p$data <- NULL; h_p$raw_files <- NULL
-check("hospital element identical (apart from data / raw_files)", identical(h_o, h_p))
+h_o <- oo$source_files$hospital[c("ref_date", "birth_year_limit", "variables")]
+h_p <- src_p$hospital[c("ref_date", "birth_year_limit", "variables")]
+check("hospital element identical (dates, birth-year limits, variables)", identical(h_o, h_p))
 s_lines <- readLines(script)
 npr_paths <- sub('^.*fread\\("([^"]+)".*$', "\\1", grep('fread\\("N:/durable/Raw_data/NPR/', s_lines, value = TRUE))
 check("raw NPR paths identical to the script's fread() paths (same order som..tsb)", identical(npr_paths, unname(src_p$hospital$raw_files)))
@@ -315,6 +320,27 @@ print(changed_rows(S$b, S$n, "n"))
 check("(n) the changed values are stored in the settings",
       identical(attr(runs$n, "settings")[c("same_event_days", "marker_lookback_days", "o35_window_days")],
                 list(same_event_days = 30, marker_lookback_days = 40, o35_window_days = 5)))
+
+## ---- 9. source layouts of the projects and date forms ---------------------------------------------
+cat("\n== 9. the same data in the layouts of P704, P1380 and a generic layout (uio_source_files(), uio_dates()) ==\n")
+run_child("child_run_layouts.R", list(lib = lib, raw_dir = raw_dir, tmp = tmp, out = file.path(tmp, "layouts.rds")), "package_layouts")
+lay <- readRDS(file.path(tmp, "layouts.rds"))
+key_cols <- function(x) {
+  x <- strip(x)
+  x[, .(ID = as.integer(ID), date_outcome = as.Date(date_outcome), outcome_final, MC_source, TOP_source,
+        pr_start_final = as.Date(pr_start_final), GA_event_days_final, dating_method, truncated_at_previous_outcome)][order(ID, date_outcome)]
+}
+check("P1111 layout via uio_project_sources(\"p1111\") == run (b)", isTRUE(all.equal(key_cols(lay$res$p1111), key_cols(runs$b), check.attributes = FALSE)))
+for (lt in c("p704", "p1380", "generic")) {
+  ok <- isTRUE(all.equal(key_cols(lay$res[[lt]]), key_cols(lay$res$p1111), check.attributes = FALSE))
+  check(sprintf("%s layout gives the same pregnancies, outcomes, dates and dating methods as the P1111 layout", lt), ok)
+  if (!ok) { cat("observed:\n"); print(key_cols(lay$res[[lt]])); cat("P1111:\n"); print(key_cols(lay$res$p1111)) }
+}
+cat("  P704: day offsets from 1997-09-24, NPR with tilstand_1..n, KUHR without sex\n",
+    " P1380: MBRN SPSS with text dates (mdy HMS), NPR contact + code files, KUHR .dsv with yyyymmdd\n",
+    " generic: MBRN dates dd.mm.yyyy, NPR and KUHR with offsets from a per-woman reference date, sex coded K/M\n")
+cat("  a missing column gives: ", lay$missing_cols, "\n", sep = "")
+check("uio_source_files() reports missing required columns", grepl("lacks the column", lay$missing_cols, fixed = TRUE))
 
 saveRDS(list(original = orig, package = runs, package_noquads = pkg_nq), file.path(results_dir, "regression_results.rds"))
 cat("\nOVERALL:", if (ok_all) "ALL CHECKS PASSED" else "SOME CHECKS FAILED", "\n")

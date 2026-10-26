@@ -27,11 +27,11 @@ Imports:
     cli,
     dplyr,
     fs,
+    haven,
     stats,
     tools,
     utils
 Suggests:
-    haven,
     codetools
 SystemRequirements: A C++ compiler at run time (the C++ helpers are compiled with
     Rcpp::sourceCpp() when the algorithm runs; Rtools on Windows).

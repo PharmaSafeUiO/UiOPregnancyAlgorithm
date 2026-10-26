@@ -6,7 +6,7 @@ library(UiOPregnancyAlgorithm, lib.loc = p$lib)
 cat("package version:", format(packageVersion("UiOPregnancyAlgorithm", lib.loc = p$lib)), "\n")
 cat("search path:", search(), "\n")
 
-src <- uio_source_files(raw_dir = p$raw_dir)
+src <- uio_project_sources("p1111", raw_dir = p$raw_dir)
 owd <- getwd()
 v13 <- uio_v13_settings()
 if (isTRUE(p$single)) {     # one run with the v1.3 settings only
@@ -73,18 +73,18 @@ runs$i2 <- run_uio_pa(workdir = p$workdir, source_files = src, years_range = c(2
                       settings = modifyList(v13, list(induced_abortion_default_distribution = dist, random_seed = 7)))
 runs$j <- run_uio_pa(workdir = p$workdir, source_files = src, settings = v13, years_range = c(2008, 2023))   # v1.3 settings, cache with weight
 draws <- UiOPregnancyAlgorithm:::.uio_draw_days(dist, rep(2018, 20000), 7)
-bad_dist <- tryCatch(run_uio_pa(workdir = p$empty_dir, settings = list(induced_abortion_default_distribution = data.frame(days_min = 50, days_max = 40, prob = 1))),
+bad_dist <- tryCatch(run_uio_pa(workdir = p$empty_dir, source_files = src, settings = list(induced_abortion_default_distribution = data.frame(days_min = 50, days_max = 40, prob = 1))),
                      error = function(e) conditionMessage(e))
 
 # working directory is restored also when the run fails
-err <- tryCatch(run_uio_pa(workdir = p$empty_dir, source_files = uio_source_files(raw_dir = file.path(p$empty_dir, "nope"))),
+err <- tryCatch(run_uio_pa(workdir = p$empty_dir, source_files = uio_project_sources("p1111", raw_dir = file.path(p$empty_dir, "nope"))),
                 error = function(e) conditionMessage(e))
 wd_restored_after_error <- identical(getwd(), owd)
 # invalid settings are rejected
-bad <- tryCatch(run_uio_pa(workdir = p$empty_dir, settings = list(induced_abortion_days = 49)),
+bad <- tryCatch(run_uio_pa(workdir = p$empty_dir, source_files = src, settings = list(induced_abortion_days = 49)),
                 error = function(e) conditionMessage(e))
 # a setting given both as an argument and in `settings` is rejected
-both <- tryCatch(run_uio_pa(workdir = p$empty_dir, induced_abortion_default_days = 49, settings = list(induced_abortion_default_days = 56)),
+both <- tryCatch(run_uio_pa(workdir = p$empty_dir, source_files = src, induced_abortion_default_days = 49, settings = list(induced_abortion_default_days = 56)),
                  error = function(e) conditionMessage(e))
 
 saveRDS(list(runs = runs, cache_before = cache_before, cache_after = cache_after,
@@ -93,7 +93,7 @@ saveRDS(list(runs = runs, cache_before = cache_before, cache_after = cache_after
              formals_defaults = lapply(formals(run_uio_pa)[names(uio_default_settings())], eval),
              uio_v13_settings = uio_v13_settings(),
              mbrn_cols_after_f = mbrn_cols_after_f, rng_restored = rng_restored, draws = draws, bad_dist_message = bad_dist,
-             uio_source_files_default = uio_source_files(),
+             uio_source_files_default = uio_project_sources("p1111"),
              uio_hospital_codes = uio_hospital_codes(),
              uio_primary_care_codes = uio_primary_care_codes(),
              uio_default_settings = uio_default_settings()),

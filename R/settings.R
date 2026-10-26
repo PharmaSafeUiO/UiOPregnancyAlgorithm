@@ -26,7 +26,7 @@
 #'     the MBRN definition). `NULL` gives the rule of version 1.3: stillbirth if the completed
 #'     weeks `floor(SVLEN_DG / 7) > 20`, i.e. from 147 days (21+0 weeks).}
 #'   \item{`stillbirth_min_weight_g`}{`NULL` (default: birth weight not used) or a birth weight
-#'     in grams, usually `500`. The MBRN birth weight (`birth_weight` in [uio_source_files()],
+#'     in grams, usually `500`. The MBRN birth weight (`birth_weight` in [uio_source()];
 #'     column `VEKT`) of a fetal death then also decides between stillbirth and miscarriage, as set
 #'     by `stillbirth_weight_rule`. Weights of 0 or below count as missing. MBRN records without
 #'     gestational age are dropped whatever the weight, as in version 1.3.}

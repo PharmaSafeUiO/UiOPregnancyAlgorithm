@@ -64,7 +64,8 @@
 #'
 #' @param workdir Existing folder for the cached source extracts. The working directory is set to
 #'   it during the run and restored afterwards.
-#' @param source_files Source files and variable names, see [uio_source_files()].
+#' @param source_files The registry extracts: `uio_project_sources("p1111")` (or `"p704"`,
+#'   `"p1380"`) for those projects, otherwise made with [uio_source_files()].
 #' @param hospital_codes,primary_care_codes Pregnancy markers (`vocab`, `code`, `days`; row order =
 #'   priority), see [uio_hospital_codes()].
 #' @param years_range `c(first_year, last_year)` or `NULL` (no limit). Records (MBRN, NPR, KUHR)
@@ -124,7 +125,7 @@
 #' @examples
 #' \dontrun{
 #' library(UiOPregnancyAlgorithm)
-#' src <- uio_source_files(raw_dir = "N:/durable/Raw_data")
+#' src <- uio_project_sources("p1111")
 #'
 #' # main analysis (the defaults)
 #' res <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src)
@@ -142,7 +143,7 @@
 #' }
 #' @export
 run_uio_pa <- function(workdir,
-                       source_files = uio_source_files(),
+                       source_files,
                        hospital_codes = uio_hospital_codes(),
                        primary_care_codes = uio_primary_care_codes(),
                        years_range = c(2008, 2023),
@@ -164,6 +165,8 @@ run_uio_pa <- function(workdir,
                        settings = NULL) {
   if (missing(workdir) || !is.character(workdir) || length(workdir) != 1L || !dir.exists(workdir))
     stop("`workdir` must be an existing folder.", call. = FALSE)
+  if (missing(source_files))
+    stop("`source_files` is missing: use uio_project_sources(\"p1111\") (or \"p704\", \"p1380\"), or uio_source_files().", call. = FALSE)
   # settings given as arguments (explicitly, in this call) and in the `settings` list
   nms <- names(uio_default_settings())
   given <- intersect(names(match.call())[-1], nms)

@@ -53,7 +53,7 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   same_event_episode_days           = cfg_same_event_days - 1          # v1.3: episode_count55
   use_weight = !is.null(cfg_stillbirth_min_weight_g)
   if(use_weight && !"birth_weight" %in% names(source_files$birth_registry$variables))
-    stop("stillbirth_min_weight_g is set, but source_files$birth_registry$variables has no `birth_weight` (see uio_source_files()).", call. = FALSE)
+    stop("stillbirth_min_weight_g is set, but source_files$birth_registry$variables has no `birth_weight` (see uio_source()).", call. = FALSE)
   # [v1.3.1] normalize_codes also normalises the code column of the marker lists (a no-op for the
   # default lists, which are already upper case without separators)
   if(isTRUE(cfg_normalize_codes)){
@@ -99,20 +99,19 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
     )
   }
 
-  # Read every file matching the pattern (dta, csv/txt or tab-separated dsv) and row-bind them
+  # Read every file matching the pattern (dta, sav, csv/txt or tab-separated dsv/tsv) and row-bind them
   smart_load <- function(file,variables=NULL,...){
     files= fs::dir_ls(path=dirname(file),regexp = basename(file))
+    if(!length(files)) stop("No file matches ", file, call. = FALSE)   # [v2.0.0]
     ds =list()
     for(i in seq_along(files)){
       file=files[i]
-      ext = tools::file_ext(file)
-      if(ext=="dta"){
-        if(!is.null(variables)){
-          d = as.data.table(haven::read_dta(file,...))
-          d=d[,..variables]
-        }else{
-          d = as.data.table(haven::read_dta(file,...))
-        }
+      ext = tolower(tools::file_ext(file))
+      if(ext%in%c("dta","sav")){
+        # [v2.0.0] SPSS files; value labels are removed (codes kept)
+        d = if(ext=="dta") haven::read_dta(file,...) else haven::read_sav(file,...)
+        d = as.data.table(haven::zap_labels(d))
+        if(!is.null(variables)) d=d[,..variables]
 
       }else if(ext%in%c("csv","txt")){
         if(!is.null(variables)){
@@ -121,7 +120,7 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
           d = data.table::fread(file,...)
         }
 
-      }else if(ext%in%c("dsv")){
+      }else if(ext%in%c("dsv","tsv")){
         if(!is.null(variables)){
           d = data.table::fread(file,select = variables,sep = "\t",...)
         }else{
@@ -178,7 +177,9 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
     setnames(mbrn, source_files$birth_registry$variables["mother_age"], "MORS_ALDER")
     if(use_weight) setnames(mbrn, source_files$birth_registry$variables["birth_weight"], "VEKT")   # [v1.4.0]
 
-    if(!is.null(source_files$birth_registry$birth_year_limit) & !is.na(source_files$birth_registry$birth_year_limit[1]) & length(source_files$birth_registry$birth_year_limit)>0){
+    # [v2.0.0] && (a NULL limit was an error with &), and the birth year is applied only when it is a column
+    if(!is.null(source_files$birth_registry$birth_year_limit) && !is.na(source_files$birth_registry$birth_year_limit[1]) &&
+       !is.na(source_files$birth_registry$variables["birth_year"])){
       setnames(mbrn, source_files$birth_registry$variables["birth_year"], "birth_year")
       mbrn=mbrn[birth_year>=source_files$birth_registry$birth_year_limit[1] & birth_year<=source_files$birth_registry$birth_year_limit[2],]
     }
@@ -202,7 +203,13 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
     setnames(npr, source_files$hospital$variables["mother_id"], "ID")
     setnames(npr, source_files$hospital$variables["diagnose_code"], "tilst")
     setnames(npr, source_files$hospital$variables["visit_date"], "inndato")
-    setnames(npr, source_files$hospital$variables["stay_id"], "stay_id")
+    # [v2.0.0] stay_id is optional (it is rebuilt from the dates below); with a gender column only women are kept
+    if(!is.na(source_files$hospital$variables["stay_id"])) setnames(npr, source_files$hospital$variables["stay_id"], "stay_id") else npr[, stay_id := NA_integer_]
+    if(!is.na(source_files$hospital$variables["gender"])){
+      fv = if(is.null(source_files$hospital$female_value)) 2 else source_files$hospital$female_value
+      npr = npr[as.character(get(source_files$hospital$variables["gender"])) == as.character(fv)]
+      npr[, (source_files$hospital$variables["gender"]) := NULL]
+    }
 
     if(!is.null(source_files$hospital$variables["vocabulary"]) &&
        !is.na(source_files$hospital$variables["vocabulary"])){   # [v2.0.0] spelling (v1.3: "vocabulay", never found)
@@ -211,7 +218,8 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
       npr[, vocab:=npr_codes$vocab[1]]
     }
 
-    if(!is.null(source_files$hospital$birth_year_limit) & !is.na(source_files$hospital$birth_year_limit[1]) & length(source_files$hospital$birth_year_limit)>0){
+    if(!is.null(source_files$hospital$birth_year_limit) && !is.na(source_files$hospital$birth_year_limit[1]) &&
+       !is.na(source_files$hospital$variables["birth_year"])){
       setnames(npr, source_files$hospital$variables["birth_year"], "birth_year")
       npr=npr[birth_year>=source_files$hospital$birth_year_limit[1] & birth_year<=source_files$hospital$birth_year_limit[2],]
     }
@@ -239,9 +247,18 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
     setnames(kuhr, source_files$primary_care$variables["diagnose_code"], "diagnose")
     setnames(kuhr, source_files$primary_care$variables["vocabulary"], "diagnosekodeverk")
     setnames(kuhr, source_files$primary_care$variables["visit_date"], "ant_dager")
-    setnames(kuhr, source_files$primary_care$variables["gender"], "kjonn")
+    # [v2.0.0] without a gender column all records are taken as women's (an extract of mothers); female_value
+    # other than 2 is recoded to 2
+    if(!is.na(source_files$primary_care$variables["gender"])){
+      setnames(kuhr, source_files$primary_care$variables["gender"], "kjonn")
+      fv = source_files$primary_care$female_value
+      if(!is.null(fv) && !identical(as.character(fv), "2")) kuhr[, kjonn := fifelse(as.character(kjonn) == as.character(fv), 2L, 1L)]
+    }else{
+      kuhr[, kjonn := 2L]
+    }
 
-    if(!is.null(source_files$primary_care$birth_year_limit) & !is.na(source_files$primary_care$birth_year_limit[1]) & length(source_files$primary_care$birth_year_limit)>0){
+    if(!is.null(source_files$primary_care$birth_year_limit) && !is.na(source_files$primary_care$birth_year_limit[1]) &&
+       !is.na(source_files$primary_care$variables["birth_year"])){
       setnames(kuhr, source_files$primary_care$variables["birth_year"], "birth_year")
       kuhr=kuhr[birth_year>=source_files$primary_care$birth_year_limit[1] & birth_year<=source_files$primary_care$birth_year_limit[2],]
     }
@@ -264,44 +281,15 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   # ref_date = ymd("2004-01-01") - 10234
   # range(mbrn$DAGER_FDATO)+ref_date
 
-  # Dates: the extracts hold day offsets, converted as ref_date + offset (or parsed if given as text)
-  if(!"Date"%in%class(npr[,inndato])){
-    if(!is.null(source_files$hospital$ref_date)){
-      npr[,inndato:=source_files$hospital$ref_date+inndato]
-    }else if(is.null(source_files$hospital$date_format)){
-      npr[,inndato:=lubridate::as_date(inndato)]
-    }else{
-      inds=sample(1:nrow(npr),10000)
-      date_formats=names(sort(table(lubridate::guess_formats(mbrn[inds,inndato],source_files$hospital$date_format))))
-      npr[,inndato:=lubridate::as_date(inndato,format=date_formats)]
-    }
-  }
-
-
-  if(!"Date"%in%class(mbrn[,DAGER_FDATO])){
-    if(!is.null(source_files$birth_registry$ref_date)){
-      mbrn[,DAGER_FDATO:=source_files$birth_registry$ref_date+DAGER_FDATO]
-    }else if(is.null(source_files$birth_registry$date_format)){
-      mbrn[,DAGER_FDATO:=lubridate::as_date(DAGER_FDATO)]
-    }else{
-      inds=sample(1:nrow(mbrn),10000)
-      date_formats=names(sort(table(lubridate::guess_formats(mbrn[inds,DAGER_FDATO],source_files$birth_registry$date_format))))
-      mbrn[,DAGER_FDATO:=lubridate::as_date(DAGER_FDATO,format=date_formats)]
-    }
-  }
-
-
-  if(!"Date"%in%class(kuhr[,ant_dager])){
-    if(!is.null(source_files$primary_care$ref_date)){
-      kuhr[,ant_dager:=source_files$primary_care$ref_date+ant_dager]
-    }else if(is.null(source_files$primary_care$date_format)){
-      kuhr[,ant_dager:=lubridate::as_date(ant_dager)]
-    }else{
-      inds=sample(1:nrow(kuhr),10000)
-      date_formats=names(sort(table(lubridate::guess_formats(kuhr[inds,ant_dager],source_files$primary_care$date_format))))
-      kuhr[,ant_dager:=lubridate::as_date(ant_dager,format=date_formats)]
-    }
-  }
+  # Dates: real dates, day offsets from one reference date, or day offsets from the woman's own reference
+  # date (see uio_dates()). [v2.0.0] text dates are parsed with lubridate::parse_date_time() (v1.3 guessed the
+  # format from a random sample of 10,000 values, and used the MBRN table for the NPR)
+  if(!"Date"%in%class(npr[,inndato]))
+    npr[, inndato := .uio_as_date(inndato, ID, source_files$hospital)]
+  if(!"Date"%in%class(mbrn[,DAGER_FDATO]))
+    mbrn[, DAGER_FDATO := .uio_as_date(DAGER_FDATO, PasientLopeNr_MOR, source_files$birth_registry)]
+  if(!"Date"%in%class(kuhr[,ant_dager]))
+    kuhr[, ant_dager := .uio_as_date(ant_dager, ID, source_files$primary_care)]
 
   # SVLEN = completed gestational weeks; keep records from min_year (MBRN: with mother ID and GA; KUHR: women)
   mbrn[,SVLEN:=floor(SVLEN_DG/7)]

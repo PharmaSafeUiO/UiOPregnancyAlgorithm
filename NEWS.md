@@ -13,6 +13,23 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
 * New function `uio_v13_settings()`: the settings of the R script version 1.3.
 * `workdir` has no default any more (it was a project folder on TSD).
 
+## Source data
+
+* `uio_project_sources("p1111")`, `"p704"` and `"p1380"` return the complete definition of the
+  extracts of these projects (file names, columns, date forms, and the assembly of the NPR from its
+  raw extracts: seven extracts in P1111, the mothers' extracts with one column per diagnosis in P704,
+  contact and code files in P1380).
+* For other projects, `uio_source()` describes one extract (file or data frame, columns, dates) and
+  `uio_source_files()` combines the three; missing required columns are reported.
+* `uio_dates()`: real dates (`format` for text dates, parsed with `lubridate::parse_date_time()`),
+  day offsets from one reference date (`ref_date`), or day offsets from a reference date per woman
+  (`ref_dates`, a file with `person_id` and `ref_date`).
+* SPSS `.sav` and `.tsv` files are read; value labels are removed. The NPR `stay_id` and the KUHR
+  `gender` column are optional (without `gender`, the extract is taken to hold women only), as is
+  `birth_year` (a birth-year limit without the column was an error). `female_value` gives the code
+  of women in the `gender` column.
+* `source_files` has no default in `run_uio_pa()`.
+
 ## New settings (defaults = the values of version 1.3)
 
 * `marker_lookback_days` (70): markers are collected from this many days before the outcome.

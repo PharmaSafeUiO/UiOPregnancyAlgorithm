@@ -6,7 +6,7 @@
 \usage{
 run_uio_pa(
   workdir,
-  source_files = uio_source_files(),
+  source_files,
   hospital_codes = uio_hospital_codes(),
   primary_care_codes = uio_primary_care_codes(),
   years_range = c(2008, 2023),
@@ -32,7 +32,8 @@ run_uio_pa(
 \item{workdir}{Existing folder for the cached source extracts. The working directory is set to
 it during the run and restored afterwards.}
 
-\item{source_files}{Source files and variable names, see \code{\link[=uio_source_files]{uio_source_files()}}.}
+\item{source_files}{The registry extracts: \code{uio_project_sources("p1111")} (or \code{"p704"},
+\code{"p1380"}) for those projects, otherwise made with \code{\link[=uio_source_files]{uio_source_files()}}.}
 
 \item{hospital_codes, primary_care_codes}{Pregnancy markers (\code{vocab}, \code{code}, \code{days}; row order =
 priority), see \code{\link[=uio_hospital_codes]{uio_hospital_codes()}}.}
@@ -175,7 +176,7 @@ C++ compiler is needed at run time (Rtools on Windows).
 \examples{
 \dontrun{
 library(UiOPregnancyAlgorithm)
-src <- uio_source_files(raw_dir = "N:/durable/Raw_data")
+src <- uio_project_sources("p1111")
 
 # main analysis (the defaults)
 res <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src)

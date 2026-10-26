@@ -28,7 +28,10 @@ if (p$mode == "script") {
 } else {
   ns <- loadNamespace("UiOPregnancyAlgorithm", lib.loc = p$lib)
   f_detect <- get("detect_pregnancy_episodes", envir = ns)
-  f_prep <- get("uio_prepare_sources", envir = ns)
+  # [v2.0.0] the P1111 NPR preparation is in uio_prepare_sources() (caching) and .uio_npr_p1111() (reading)
+  f_prep <- function() NULL
+  body(f_prep) <- call("{", body(get("uio_prepare_sources", envir = ns)), body(get(".uio_npr_p1111", envir = ns)))
+  environment(f_prep) <- ns
   where <- ns
   cands <- c("UiOPregnancyAlgorithm", cands)
 }

@@ -23,7 +23,7 @@ van Gelder; manuscript in preparation).
 
 ```r
 # install.packages("remotes")
-remotes::install_github("<owner>/UiOPregnancyAlgorithm")
+remotes::install_github("PharmaSafeUiO/UiOPregnancyAlgorithm")
 ```
 
 Three small C++ helpers are compiled with `Rcpp::sourceCpp()` when the algorithm runs, so a C++
@@ -34,12 +34,12 @@ compiler is needed at run time (Rtools on Windows; on TSD it is available in the
 ```r
 library(UiOPregnancyAlgorithm)
 
-src <- uio_source_files(raw_dir = "N:/durable/Raw_data")   # where the registry extracts are
-res <- run_uio_pa(workdir = "N:/durable/work/uio",          # folder for the cached extracts
+src <- uio_project_sources("p1111")                          # the registry extracts (see below)
+res <- run_uio_pa(workdir = "N:/durable/work/uio",           # an existing folder for the cached extracts
                   source_files = src)
 
 res[, .N, by = outcome_lable]
-attr(res, "settings")                                       # the settings used
+attr(res, "settings")                                        # the settings used
 ```
 
 `res` has one row per pregnancy: the woman (`ID`), the outcome (`outcome_final`,
@@ -93,12 +93,70 @@ codes and 6 ICPC-2 codes) list the markers in priority order with the days from 
 pregnancy start. Nordeng et al. (2024, Supplementary Table 1) considered 45 ICD-10 and 9 ICPC-2
 codes and kept those recorded at a median gestational age below 84 days.
 
-## Data
+## Connecting the source data
 
-`uio_source_files()` describes the extracts: file paths, the columns used, and dates stored as
-day offsets from a reference date. The defaults are the layout of the extracts of the project in
-which the package was developed; change them for other deliveries. The extracts are read once
-and cached in `workdir`; delete the cached files to read them again.
+The algorithm needs three extracts: the MBRN (one row per child), the NPR (diagnoses) and KUHR
+(diagnoses). They are read once and cached in `workdir`; delete the cached `*_full.csv` files there
+to read them again (for example after a new delivery).
+
+### Projects P1111, P704 and P1380
+
+One line. The file names, columns and date forms of these projects are built in:
+
+```r
+src <- uio_project_sources("p1111")   # MBRN, NPR (7 extracts), KUHR; day offsets from 25 Dec 1975
+src <- uio_project_sources("p704")    # MBRN, NPR_mor (tilstand_1, ...), KUHR; day offsets from 24 Sep 1997
+src <- uio_project_sources("p1380")   # MBRN (.sav), NPR (contact + code files), KUHR (.dsv); real dates
+
+res <- run_uio_pa(workdir = "N:/durable/<your folder>/uio", source_files = src)
+```
+
+If the extracts are in another folder than on TSD, give it: `uio_project_sources("p704", raw_dir = "...")`.
+
+### Other projects
+
+Describe each extract with `uio_source()`: the file, which column holds what, and how its dates are
+stored (`uio_dates()`).
+
+```r
+src <- uio_source_files(
+  birth_registry = uio_source("N:/durable/data/mbrn.csv",
+    columns = c(mother_id = "MOR_ID", mother_age = "MORS_ALDER", event_date = "FDATO",
+                child_order = "PLUREK", gestational_days = "SVLEN_DG", death_cat = "DODKAT",
+                apgar5 = "APGAR5"),
+    dates = uio_dates(format = "dmy")),
+  hospital = uio_source("N:/durable/data/npr_diagnoses.csv",            # one row per diagnosis
+    columns = c(mother_id = "ID", diagnose_code = "ICD10", visit_date = "INNDATO"),
+    dates = uio_dates(ref_date = "2000-01-01")),
+  primary_care = uio_source("N:/durable/data/kuhr/.*[.]csv",            # all matching files
+    columns = c(mother_id = "ID", diagnose_code = "DIAGNOSE", vocabulary = "KODEVERK",
+                visit_date = "DATO", gender = "KJONN"),
+    dates = uio_dates()))
+```
+
+Dates can be stored in three ways, and each extract can use its own:
+
+| How the dates are stored | `dates =` |
+|---|---|
+| real dates (or ISO text, `2015-06-15`) | `uio_dates()` |
+| text in another form (`15.06.2015`, `06/15/2015 00:00:00`) | `uio_dates(format = "dmy")`, `uio_dates(format = "mdy HMS")` |
+| days from one reference date | `uio_dates(ref_date = "1997-09-24")` |
+| days from a reference date that differs per woman | `uio_dates(ref_dates = "reference_dates.csv")` |
+
+For the last form, give a file with one row per woman and two columns, `person_id` (her ID, as in
+the extracts) and `ref_date` (her reference date):
+
+```
+person_id,ref_date
+1001,1989-03-17
+1002,1992-11-02
+```
+
+Other column names: `uio_dates(ref_dates = "file.csv", person_id = "LOPENR", ref_column = "REFDATO")`.
+
+Files can be `.csv`, `.txt`, tab-separated `.dsv`/`.tsv`, Stata `.dta` or SPSS `.sav`. The NPR must
+be one row per diagnosis (`mother_id`, `diagnose_code`, `visit_date`); with a `gender` column only
+women are kept (`female_value = 2` by default). `?uio_source` lists all columns.
 
 The package includes all women in the registries, with no age limit. Restrict the study
 population (for example to women aged 12–55 years) after the run.
