@@ -74,6 +74,17 @@ runs$n <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023
                      settings = modifyList(v13, list(same_event_days = 30, marker_lookback_days = 40, o35_window_days = 5)))
 runs$h <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
                      settings = modifyList(v13, list(induced_abortion_default_days = data.frame(year = c(2015, 2019), days = c(47, 45)))))
+# (p) [v2.0.0] year table of the Registry of Pregnancy Termination; (q) a table without 2018, so W4 (2018) is extrapolated
+runs$p <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
+             settings = modifyList(v13, list(induced_abortion_default_days = uio_termination_days_by_year())))
+tab_q <- uio_termination_days_by_year(); tab_q <- structure(tab_q[tab_q$year >= 2019, ], extrapolate = TRUE)
+warn_q <- character(0)
+runs$q <- withCallingHandlers(rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
+                                 settings = modifyList(v13, list(induced_abortion_default_days = tab_q))),
+                              warning = function(w) { warn_q <<- c(warn_q, conditionMessage(w)); invokeRestart("muffleWarning") })
+term_table <- uio_termination_days_by_year()
+extrap_days <- UiOPregnancyAlgorithm:::.uio_days_for_years(term_table, c(2008, 2014, 2018, 2025, 2040))
+own_table_days <- UiOPregnancyAlgorithm:::.uio_days_for_years(data.frame(year = c(2015, 2019), days = c(47, 45)), c(2008, 2030))
 dist <- data.frame(days_min = c(42, 56), days_max = c(55, 69), prob = c(0.8, 0.2))
 set.seed(99); seed_before <- .Random.seed
 runs$i <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
@@ -107,6 +118,7 @@ saveRDS(list(runs = runs, cache_before = cache_before, cache_after = cache_after
              uio_source_files_default = uio_project_sources("p1111"),
              uio_hospital_codes = uio_hospital_codes(),
              uio_primary_care_codes = uio_primary_care_codes(),
-             uio_default_settings = uio_default_settings()),
+             uio_default_settings = uio_default_settings(),
+             warn_q = warn_q, term_table = term_table, extrap_days = extrap_days, own_table_days = own_table_days),
         p$out)
 cat("search path at end:", search(), "\n")

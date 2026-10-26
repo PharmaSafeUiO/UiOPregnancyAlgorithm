@@ -642,9 +642,6 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   # Merge with MBRN_check_multifetal
   MBRN <- merge(MBRN, MBRN_check_multifetal, by = "preg_id", all.y = TRUE, all.x = TRUE)
 
-  # Manually checked preg_id 581171 (miscarriage + missing) does not appear to be multifetal gestation
-  MBRN[preg_id == 581171, `:=`(MBRN_miscarriage = 1, MBRN_unknown = NA, PLURAL_new = 1)]
-
   # Now, we can drop multifetal pregnancies, keeping the first child of multiplets
   MBRN <- MBRN[PLUREK_new == 1]
 

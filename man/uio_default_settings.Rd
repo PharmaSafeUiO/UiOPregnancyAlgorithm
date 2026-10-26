@@ -80,7 +80,9 @@ without any dating information (no MBRN gestational age, no accepted marker, no 
 marker, no O35 code). Default \code{49} (7+0 weeks). Either one number for all years, or a data
 frame with columns \code{year} and \code{days} (one row per year of the outcome) for year-specific
 defaults: a year that is not listed takes the value of the closest earlier listed year, and
-years before the first listed year take the first value.}
+years before the first listed year take the first value. \code{\link[=uio_termination_days_by_year]{uio_termination_days_by_year()}}
+gives such a table from the Registry of Pregnancy Termination (2015-2024); with it, years
+outside 2015-2024 are extrapolated from its trend, with a warning.}
 \item{\code{miscarriage_default_days}}{Same for a miscarriage (outcome 2). Default \code{70} (10+0 weeks).}
 \item{\code{molar_default_days}}{Same for a molar pregnancy (outcome 5). Default \code{77} (11+0 weeks).}
 \item{\code{ectopic_default_days}}{Same for an ectopic pregnancy (outcome 6). Default \code{56} (8+0 weeks).}

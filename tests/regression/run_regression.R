@@ -323,6 +323,22 @@ cmp_expected(S$m, exp_m, "(m) differs from v1.3 exactly as expected")
 check("(n0) same_event_days = 56, marker_lookback_days = 70, o35_window_days = 27 given explicitly == v1.3", all(same_dt(runs$b, runs$n0)))
 cat("(n) same_event_days = 30, marker_lookback_days = 40, o35_window_days = 5: changed pregnancies vs v1.3\n")
 print(changed_rows(S$b, S$n, "n"))
+tt <- pk$term_table
+cat("  uio_termination_days_by_year():\n"); print(tt)
+check("registry table 2015-2024: days 47, 47, 46, 46, 45, 44, 44, 44, 45, 45, marked for extrapolation",
+      identical(tt$year, 2015:2024) && identical(tt$days, c(47, 47, 46, 46, 45, 44, 44, 44, 45, 45)) && isTRUE(attr(tt, "extrapolate")))
+exp_p <- modify(expected_b, data.table(ID = 4L, date_outcome = "2018-02-14", outcome = 3, GA_days = 46, dating_method = "fixed outcome-specific default"))
+cat("(p) induced_abortion_default_days = uio_termination_days_by_year(): W4 (2018) gets 46 days.\n")
+cmp_expected(S$p, exp_p, "(p) differs from v1.3 exactly as expected")
+cat("  extrapolated 2008, 2014, 2018 (listed), 2025, 2040:", pk$extrap_days, "\n")
+check("years outside 2015-2024 follow the trend, kept within 44-47 days (47, 47, 46, 44, 44)", identical(pk$extrap_days, c(47, 47, 46, 44, 44)))
+check("a table without the attribute is not extrapolated (closest earlier year; first year before)", identical(pk$own_table_days, c(47, 45)))
+exp_q <- modify(expected_b, data.table(ID = 4L, date_outcome = "2018-02-14", outcome = 3, GA_days = 44, dating_method = "fixed outcome-specific default"))
+cat("(q) table 2019-2024 only: W4 (2018) is extrapolated (44 days). Warning:\n ", pk$warn_q, "\n")
+cmp_expected(S$q, exp_q, "(q) the extrapolated year gets the trend value")
+check("(q) the run warns that 2018 is extrapolated and how to return to the fixed default",
+      length(pk$warn_q) == 1L && grepl("2018: 44 days", pk$warn_q, fixed = TRUE) && grepl("EXTRAPOLATED", pk$warn_q, fixed = TRUE) &&
+        grepl("leave out `induced_abortion_default_days` (49 days)", pk$warn_q, fixed = TRUE))
 check("(n) the changed values are stored in the settings",
       identical(attr(runs$n, "settings")[c("same_event_days", "marker_lookback_days", "o35_window_days")],
                 list(same_event_days = 30, marker_lookback_days = 40, o35_window_days = 5)))

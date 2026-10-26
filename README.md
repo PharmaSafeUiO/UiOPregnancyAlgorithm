@@ -92,7 +92,7 @@ the main analysis of the four-algorithm comparison, with birth weight added to t
 | `marker_rejection_days` | `119` | a marker-based estimate of 119 days (17 weeks) or more is rejected and the next marker tried; if all are rejected the pregnancy gets 119 days |
 | `marker_lookback_days` | `70` | markers are searched from this many days before the outcome |
 | `same_event_days` | `56` | records less than 56 days apart are the same event (repeated contacts for one miscarriage or abortion; records shortly after a birth) |
-| `induced_abortion_default_days` | `49` | length of an induced abortion without dating information (7+0 weeks); one number or a table by year |
+| `induced_abortion_default_days` | `49` | length of an induced abortion without dating information (7+0 weeks); one number or a table by year (see below) |
 | `miscarriage_default_days` | `70` | idem, miscarriage (10+0 weeks) |
 | `molar_default_days` | `77` | idem, molar pregnancy (11+0 weeks) |
 | `ectopic_default_days` | `56` | idem, ectopic pregnancy (8+0 weeks) |
@@ -104,8 +104,28 @@ the main analysis of the four-algorithm comparison, with birth weight added to t
 
 ```r
 # sensitivity analyses
+run_uio_pa(workdir = wd, source_files = src,
+           induced_abortion_default_days = uio_termination_days_by_year())   # year table, see below
 run_uio_pa(workdir = wd, source_files = src, stillbirth_min_weight_g = NULL)    # gestational age only
 ```
+
+### Year-specific default for induced abortions
+
+`uio_termination_days_by_year()` gives the median gestational age of induced abortions in Norway for
+each year 2015–2024 (44–47 days), from the Registry of Pregnancy Termination (FHI, *Rapport om
+svangerskapsavbrot for 2024*, Tabell 6; interpolated within weeks 7–8). It is an option, not the
+default:
+
+```r
+run_uio_pa(workdir = wd, source_files = src,
+           induced_abortion_default_days = uio_termination_days_by_year())
+```
+
+Outcome years before 2015 or after 2024 have no registry value. Their values are **extrapolated**
+from the linear trend of the table, rounded and kept within 44–47 days. The run then gives a warning
+that lists these years and values, and the same note appears in the printed summary and the HTML
+report. To go back to the fixed default, leave out `induced_abortion_default_days` (49 days) or give
+it one number.
 
 ## Pregnancy markers
 

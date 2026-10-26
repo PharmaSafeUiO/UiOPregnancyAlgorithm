@@ -63,7 +63,9 @@
 #'     marker, no O35 code). Default `49` (7+0 weeks). Either one number for all years, or a data
 #'     frame with columns `year` and `days` (one row per year of the outcome) for year-specific
 #'     defaults: a year that is not listed takes the value of the closest earlier listed year, and
-#'     years before the first listed year take the first value.}
+#'     years before the first listed year take the first value. [uio_termination_days_by_year()]
+#'     gives such a table from the Registry of Pregnancy Termination (2015-2024); with it, years
+#'     outside 2015-2024 are extrapolated from its trend, with a warning.}
 #'   \item{`miscarriage_default_days`}{Same for a miscarriage (outcome 2). Default `70` (10+0 weeks).}
 #'   \item{`molar_default_days`}{Same for a molar pregnancy (outcome 5). Default `77` (11+0 weeks).}
 #'   \item{`ectopic_default_days`}{Same for an ectopic pregnancy (outcome 6). Default `56` (8+0 weeks).}
@@ -155,8 +157,12 @@ uio_v13_settings <- function() {
     if (is.data.frame(v)) {
       if (!all(c("year", "days") %in% names(v)) || !nrow(v) || !is_whole_vec(v$year) || !is_whole_vec(v$days) || anyDuplicated(v$year))
         stop("Setting `", nm, "` as a table must be a data frame with columns `year` and `days` (whole numbers, one row per year).", call. = FALSE)
+      ext <- isTRUE(attr(v, "extrapolate"))
       v <- data.frame(year = as.numeric(v$year), days = as.numeric(v$days))
-      out[[nm]] <- v[order(v$year), , drop = FALSE]
+      v <- v[order(v$year), , drop = FALSE]
+      rownames(v) <- NULL
+      if (ext) attr(v, "extrapolate") <- TRUE
+      out[[nm]] <- v
     } else if (!is_whole_days(v)) {
       stop("Setting `", nm, "` must be a single non-negative whole number of days, or a data frame with columns `year` and `days`.", call. = FALSE)
     } else out[[nm]] <- as.numeric(v)
@@ -214,12 +220,18 @@ uio_v13_settings <- function() {
 
 # Value of an outcome-specific default for each outcome year (internal). `x` is one number or
 # a year table (data frame year, days, sorted by year): a year that is not listed takes the closest
-# earlier listed year, a year before the first listed year takes the first.
+# earlier listed year, a year before the first listed year takes the first. A table with the attribute
+# `extrapolate = TRUE` (uio_termination_days_by_year()) instead extrapolates years outside its range.
 .uio_days_for_years <- function(x, years) {
   if (!is.data.frame(x)) return(rep(x, length(years)))
   i <- findInterval(years, x$year)
   i[i == 0L] <- 1L
-  x$days[i]
+  d <- x$days[i]
+  if (isTRUE(attr(x, "extrapolate"))) {
+    out <- years < min(x$year) | years > max(x$year)
+    if (any(out)) d[out] <- .uio_extrapolate_days(x, years[out])
+  }
+  d
 }
 
 # Pregnancy lengths drawn from a distribution (internal). `dist` has year (NA = all years),

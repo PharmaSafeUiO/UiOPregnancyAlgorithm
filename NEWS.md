@@ -15,6 +15,11 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
   takes part in the stillbirth rule (`stillbirth_min_weight_g = 500`, `stillbirth_weight_rule = "and"`:
   22 weeks and 500 g, the MBRN definition) when it is mapped.
 * New function `uio_v13_settings()`: the settings of the R script version 1.3.
+* New function `uio_termination_days_by_year()`: the median gestational age of induced abortions in
+  Norway per year 2015-2024 (Registry of Pregnancy Termination, FHI report for 2024, Tabell 6), for
+  `induced_abortion_default_days`. Not the default. Outcome years outside 2015-2024 are extrapolated
+  from the trend of the table (kept within its range); the run warns which years and values, with a
+  note in the summary and the report, and explains how to return to the fixed default.
 * `workdir` has no default any more (it was a project folder on TSD).
 
 ## Results: description of each pregnancy, summary, output folder

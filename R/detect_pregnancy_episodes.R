@@ -1454,25 +1454,34 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
   # [v1.3.1] outcome-specific default lengths are settings (miscarriage, induced abortion, molar, ectopic)
   # [v1.4.0] a default may be a year table (year of the outcome), and the induced-abortion default may be
   # drawn from a distribution (rows in the current order: ID, date_outcome)
-  set_default = function(oc, x){
+  # [v2.0.0] a table with attribute extrapolate (uio_termination_days_by_year()) extrapolates years outside
+  # its range; those years are reported (warning, summary, report)
+  extrapolated = list()
+  set_default = function(oc, x, nm = ""){
     if(is.data.frame(x)){
       i = early_nonlive_births[, which(is.na(pr_start_final) & outcome_final == oc)]
-      early_nonlive_births[i, pr_start_final := date_outcome - .uio_days_for_years(x, year(date_outcome))]
+      yrs = early_nonlive_births[i, year(date_outcome)]
+      early_nonlive_births[i, pr_start_final := date_outcome - .uio_days_for_years(x, yrs)]
+      if(isTRUE(attr(x, "extrapolate"))){
+        out = sort(unique(yrs[yrs < min(x$year) | yrs > max(x$year)]))
+        if(length(out)) extrapolated[[nm]] <<- data.frame(year = out, days = .uio_extrapolate_days(x, out))
+      }
     }else{
       early_nonlive_births[is.na(pr_start_final) & outcome_final == oc, pr_start_final := date_outcome - x]
     }
   }
   early_nonlive_births[, default_drawn := NA_integer_]
-  set_default(2, cfg_miscarriage_default_days)
+  set_default(2, cfg_miscarriage_default_days, "miscarriage_default_days")
   if(is.null(cfg_induced_abortion_default_distribution)){
-    set_default(3, cfg_induced_abortion_default_days)
+    set_default(3, cfg_induced_abortion_default_days, "induced_abortion_default_days")
   }else{
     i = early_nonlive_births[, which(is.na(pr_start_final) & outcome_final == 3)]
     drawn = .uio_draw_days(cfg_induced_abortion_default_distribution, early_nonlive_births[i, year(date_outcome)], cfg_random_seed)
     early_nonlive_births[i, `:=`(pr_start_final = date_outcome - drawn, default_drawn = 1L)]
   }
-  set_default(5, cfg_molar_default_days)
-  set_default(6, cfg_ectopic_default_days)
+  set_default(5, cfg_molar_default_days, "molar_default_days")
+  set_default(6, cfg_ectopic_default_days, "ectopic_default_days")
+  for(msg in .uio_extrapolation_notes(extrapolated)) warning(msg, call. = FALSE)
   early_nonlive_births[, pr_start_previous := NA_Date_]
   # early_nonlive_births[, pr_start_previous := fifelse(pr_start_final < shift(date_outcome),
   #                                                     shift(date_outcome), pr_start_previous), by =ID]
@@ -1519,6 +1528,7 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
 
   early_nonlive_births = merge(early_nonlive_births, outcome_lables, by = "outcome_final", all.x = TRUE)
 
+  uio_capture$extrapolated = extrapolated
   setattr(early_nonlive_births, "uio_capture", uio_capture)   # [v2.0.0] used and removed by run_uio_pa()
   early_nonlive_births
 }

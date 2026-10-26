@@ -219,6 +219,7 @@ run_uio_pa <- function(workdir,
   notes <- character(0)
   if (!is.null(settings$stillbirth_min_weight_g) && !isTRUE(cap$weight_used))
     notes <- c(notes, "Birth weight not mapped: stillbirth decided by gestational age only.")
+  notes <- c(notes, .uio_extrapolation_notes(cap$extrapolated))
   out <- .uio_describe(res, cap, settings, hospital_codes, primary_care_codes)
   avail <- .uio_code_availability(cap, settings, hospital_codes, primary_care_codes)
   rm(res, cap)

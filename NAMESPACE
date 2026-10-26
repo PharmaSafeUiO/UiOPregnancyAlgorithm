@@ -10,6 +10,7 @@
 export(run_uio_pa)
 export(uio_default_settings)
 export(uio_v13_settings)
+export(uio_termination_days_by_year)
 export(uio_source_files)
 export(uio_source)
 export(uio_dates)
