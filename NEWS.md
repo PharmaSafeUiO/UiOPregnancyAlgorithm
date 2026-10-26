@@ -1,0 +1,118 @@
+# UiOPregnancyAlgorithm 2.0.0
+
+The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati, van Gelder).
+
+## Settings as arguments
+
+* Every setting is now an argument of `run_uio_pa()` with its default, documented in
+  `?run_uio_pa` and `?uio_default_settings`. They can still be given together as a list
+  (`settings =`); a setting given both ways is an error.
+* The defaults are the settings of the main analysis of the comparison: `stillbirth_min_days = 154`
+  (22+0 weeks, the MBRN definition), `marker_rejection_days = 119` (17 weeks, as in Nordeng et al.
+  2024), `normalize_codes = TRUE`, and the other values of version 1.3.
+* New function `uio_v13_settings()`: the settings of the R script version 1.3.
+* `workdir` has no default any more (it was a project folder on TSD).
+
+## New settings (defaults = the values of version 1.3)
+
+* `marker_lookback_days` (70): markers are collected from this many days before the outcome.
+* `same_event_days` (56): records less than this many days apart are the same event. Version 1.3
+  computed the episode thresholds 1-60 days and used only 55; only the one that is used is now
+  computed (same result, faster).
+* `o35_window_days` (27): an O35 code from the abortion date up to this many days after it.
+* `stillbirth_weight_rule = "and"`: stillbirth only from `stillbirth_min_days` and
+  `stillbirth_min_weight_g` (the gestational-age rule alone when the weight is missing).
+
+## Other
+
+* The hospital `vocabulary` variable of `uio_source_files()` is now found when it is given (it was
+  looked up as "vocabulay"); with the default source files nothing changes.
+* Help pages describe how the algorithm works, the time conventions (the start is day 0; gestational
+  age = outcome date - start), the output columns and the source files.
+* The original v1.3 script is included for the regression test (`tests/regression/reference/`).
+
+# UiOPregnancyAlgorithm 1.4.0
+
+Two new options. Both are off by default, so the defaults give the same results as 1.3.1.
+
+## Default lengths of undated induced abortions
+
+* `induced_abortion_default_days` (and the other outcome-specific defaults: `miscarriage_default_days`,
+  `molar_default_days`, `ectopic_default_days`) accepts a data frame with columns `year` and `days`, for a
+  default that depends on the year of the outcome. A year that is not listed takes the value of the closest
+  earlier listed year; years before the first listed year take the first value.
+* `induced_abortion_default_distribution`: a data frame with columns `days_min`, `days_max`, `prob` and
+  optionally `year`. Each induced abortion without other dating information gets a length drawn from it
+  (a row with probability `prob`, rescaled within the year, then a whole number of days uniformly in
+  `days_min`-`days_max`), so that one fixed value does not create an artificial spike. The draws are
+  reproducible with `random_seed` (default 1); the caller's random-number state is restored. These
+  pregnancies have `dating_method` "fixed outcome-specific default (drawn from distribution)".
+
+## Birth weight for stillbirth
+
+* `stillbirth_min_weight_g` (grams, e.g. 500) uses the MBRN birth weight (`VEKT`, new element
+  `birth_weight` of `uio_source_files()$birth_registry$variables`) for fetal deaths (DODKAT 7-9).
+  `stillbirth_weight_rule = "or"` (default): stillbirth if the gestational-age rule (`stillbirth_min_days`)
+  says stillbirth or the weight is at least the limit; `"weight_first"`: the weight decides when recorded,
+  the gestational-age rule otherwise. Weights of 0 or below count as missing. MBRN records without
+  gestational age are still dropped, as in 1.3.
+* The weight column is read only when `stillbirth_min_weight_g` is set. A cached
+  `birth_registry_full.csv` without it is then read again from the source and cached with the weight.
+
+# UiOPregnancyAlgorithm 1.3.1
+
+First release as an installable R package. The algorithm is version 1.3
+(`revised_codes/UiO_PA_v1.3/UiO_preg_Algo_v1.3.R`). Changes from 1.3:
+
+## Packaging (no change in results)
+
+* The script is now the function `run_uio_pa()`. The top-level preparation and caching of the NPR
+  extract (`npr_mothers_full.csv`), formerly run when the script was sourced, is the internal
+  function `uio_prepare_sources()`. `run_uio_pa()` sets the working directory to `workdir` and
+  restores the previous one on exit.
+* `uio_source_files()` returns the v1.3 `source_files` list (same TSD paths and variable mappings).
+  Its arguments override the paths: `raw_dir`, `mbrn_file`, `npr_files`, `kuhr_file`. The seven
+  raw NPR paths, previously hard-coded in the script, are in `source_files$hospital$raw_files`.
+  If `source_files$hospital$data` is supplied, it is used as is.
+* `uio_hospital_codes()` and `uio_primary_care_codes()` return the v1.3 marker lists.
+* The three C++ helpers are still compiled at run time with `Rcpp::sourceCpp(code = ...)` (same
+  C++ code). They are now created in the function's own environment (`env = environment()`)
+  instead of the global environment.
+* Unqualified calls resolve to the same functions as in the script run with
+  `library(Rcpp); library(data.table); library(lubridate); library(stringr)`, for example
+  `lubridate::year`. The package does this through NAMESPACE imports, so it no longer depends on
+  the order of the packages on the user's search path.
+* The result carries the settings used, as `attr(result, "settings")`.
+* data.table compatibility (same assignment, no change in results): v1.3 lines 481-482,
+  `MBRN[, var_1:=NA_Date_, with = FALSE]`, are now `MBRN[, (var_1):=NA_Date_]`. Combining
+  `with = FALSE` with `:=` warns from data.table 1.15.0 and is an error in 1.17.x. The lines run
+  only when the MBRN data have no quadruplets (or no triplets), so on such data v1.3 fails with
+  data.table >= 1.17.
+
+## New settings (`settings =` argument, see `uio_default_settings()`)
+
+The defaults reproduce v1.3:
+
+* `induced_abortion_default_days = 56`, `miscarriage_default_days = 70`,
+  `molar_default_days = 77`, `ectopic_default_days = 56`: the outcome-specific default pregnancy
+  lengths.
+* `o35_induced_days = 80`: pregnancy length of an induced abortion with an O35 prenatal-diagnosis
+  code.
+* `stillbirth_min_days = NULL`: `NULL` keeps the v1.3 split of MBRN fetal deaths (DODKAT 7-9):
+  stillbirth if `floor(SVLEN_DG/7) > 20`. A number, e.g. `154`, makes it a stillbirth if
+  `SVLEN_DG >= 154` and a miscarriage otherwise (as in `revised_codes_SB_22`).
+* The `dating_method` label of the O35 length follows the setting. With the default it is
+  unchanged: `"fixed 80 d (TOP with O35)"`.
+
+## Diagnosis-code normalisation (`normalize_codes = TRUE` by default)
+
+* After NPR and KUHR are loaded (from the raw files or the cached CSVs), the diagnosis codes
+  (NPR `tilst`, KUHR `diagnose`) are normalised in memory to `toupper(gsub("[^A-Za-z0-9]", "", x))`.
+  The cached CSV files keep the raw codes. Marker and miscarriage matching uses patterns without
+  dots ("Z321", "W82", ...), and markers are compared by exact equality. Without normalisation,
+  codes stored as e.g. "Z32.1", "w82" or "W 82" were missed.
+* The `code` column of the marker lists is normalised the same way. The default lists are already
+  in this form, so this changes nothing for them.
+* The coding-system labels (`"ICD-10"`, `"ICPC-2"`) are not modified.
+* `normalize_codes = FALSE` reproduces v1.3 exactly. On data whose codes are already upper case
+  without separators, `TRUE` and `FALSE` give the same result.

@@ -1,0 +1,21 @@
+bibentry(
+  bibtype = "Article",
+  header  = "To cite the UiO pregnancy algorithm, please use:",
+  title   = "Detecting and Dating Early Non-live Pregnancy Outcomes: Generation of a Novel Pregnancy Algorithm From Norwegian Linked Health Registries",
+  author  = c(person("Hedvig M. E.", "Nordeng"), person("Angela", "Lupattelli"),
+              person("Hilde M.", "Engjom"), person("Marleen M. H. J.", "van Gelder")),
+  journal = "Pharmacoepidemiology and Drug Safety",
+  year    = "2024",
+  volume  = "33",
+  number  = "9",
+  pages   = "e70002",
+  doi     = "10.1002/pds.70002"
+)
+bibentry(
+  bibtype = "Manual",
+  header  = "To cite the R package:",
+  title   = "UiOPregnancyAlgorithm: UiO Pregnancy Algorithm for the Norwegian Health Registries",
+  author  = c(person("Hedvig M. E.", "Nordeng"), person("Saeed", "Hayati"), person("Marleen M. H. J.", "van Gelder")),
+  year    = "2026",
+  note    = "R package version 2.0.0"
+)
