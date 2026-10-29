@@ -31,7 +31,7 @@ uio_project_sources(project = c("p1111", "p704", "p1380"), raw_dir = NULL)
 \item{birth_year_limit}{\code{NULL} or \code{c(first, last)}: keep women born in these years (needs the
 \code{birth_year} column).}
 
-\item{female_value}{Value of the \code{gender} column for women. Default \code{2}.}
+\item{female_value}{Value of the \code{gender} column for women, in an NPR or KUHR extract. Default \code{2}.}
 
 \item{birth_registry, hospital, primary_care}{Extracts defined with \code{uio_source()}.}
 
@@ -92,12 +92,14 @@ file), \code{apgar5} (used only for \code{DODKAT} 13: live birth if above 0), \c
 \code{birth_year_limit}). \code{uio_mbrn_columns()} gives the names of the current MBRN deliveries.}
 \item{\code{hospital}}{\code{mother_id}, \code{diagnose_code} (ICD-10, e.g. \code{"O039"} or \code{"O03.9"}),
 \code{visit_date}. Optional: \code{vocabulary} (coding system; all \code{"ICD-10"} if not given),
-\code{stay_id}, \code{gender}, \code{birth_year}.}
+\code{stay_id}, \code{gender} (all women if not given), \code{birth_year}.}
 \item{\code{primary_care}}{\code{mother_id}, \code{diagnose_code}, \code{vocabulary} (\code{"ICD-10"} or
 \code{"ICPC-2"}), \code{visit_date}. Optional: \code{gender} (all women if not given), \code{birth_year}.}
 }
-The woman's ID must be the same in the three extracts. With \code{gender}, only women are kept
-(\code{female_value}, default 2 as in the Norwegian registries).
+The woman's ID must be the same in the three extracts. In the NPR and KUHR extracts (\code{hospital}
+and \code{primary_care}), a \code{gender} column keeps only women: the rows whose value equals that
+extract's \code{female_value} (default 2 as in the Norwegian registries). The MBRN extract has no
+gender filter.
 }
 
 \section{Files}{

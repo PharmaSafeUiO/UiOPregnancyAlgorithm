@@ -41,9 +41,7 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   cfg_marker_rejection_days         = settings$marker_rejection_days
   cfg_stillbirth_min_days           = settings$stillbirth_min_days
   cfg_normalize_codes               = settings$normalize_codes
-  # [v1.4.0] drawn default lengths for induced abortions, birth weight for stillbirth
-  cfg_induced_abortion_default_distribution = settings$induced_abortion_default_distribution
-  cfg_random_seed                   = settings$random_seed
+  # [v1.4.0] birth weight for stillbirth
   cfg_stillbirth_min_weight_g       = settings$stillbirth_min_weight_g
   cfg_stillbirth_weight_rule        = settings$stillbirth_weight_rule
   # [v2.0.0] fixed values of v1.3 that are now settings (defaults = v1.3 values)
@@ -106,28 +104,62 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   smart_load <- function(file,variables=NULL,...){
     files= fs::dir_ls(path=dirname(file),regexp = basename(file))
     if(!length(files)) stop("No file matches ", file, call. = FALSE)   # [v2.0.0]
+    # [v2.0.0] the requested columns are checked in each file before it is read: a column whose name differs
+    # only in upper/lower case is used (and renamed to the requested name); a missing column is an error that
+    # names the file and lists its columns (v1.3: fread warned and skipped the column, and setnames failed later)
+    match_vars = function(have, f){
+      out = variables
+      miss = !variables %in% have
+      for(j in which(miss)){
+        k = which(tolower(have) == tolower(variables[j]))
+        if(length(k) == 1L){ out[j] = have[k]; miss[j] = FALSE }
+      }
+      if(any(miss))
+        stop("Column(s) ", paste(variables[miss], collapse = ", "), " not found in ", f, " (", length(files), " file(s) match ",
+             file, "). Columns of this file: ", paste(utils::head(have, 80), collapse = ", "), if(length(have) > 80) ", ...",
+             ". Change the column names in source_files (uio_source()).", call. = FALSE)
+      if(any(out != variables))
+        cli::cli_alert_info("{basename(f)}: column{?s} {.val {out[out != variables]}} used for {.val {variables[out != variables]}}.")
+      out
+    }
     ds =list()
     for(i in seq_along(files)){
-      file=files[i]
-      ext = tolower(tools::file_ext(file))
+      file_i=files[i]
+      ext = tolower(tools::file_ext(file_i))
       if(ext%in%c("dta","sav")){
         # [v2.0.0] SPSS files; value labels are removed (codes kept)
-        d = if(ext=="dta") haven::read_dta(file,...) else haven::read_sav(file,...)
+        d = if(ext=="dta") haven::read_dta(file_i,...) else haven::read_sav(file_i,...)
         d = as.data.table(haven::zap_labels(d))
-        if(!is.null(variables)) d=d[,..variables]
+        if(!is.null(variables)){
+          v = match_vars(names(d), file_i)
+          d = d[, v, with = FALSE]
+          setnames(d, v, variables)
+        }
 
       }else if(ext%in%c("csv","txt")){
         if(!is.null(variables)){
-          d = data.table::fread(file,select = variables,...)
+          v = match_vars(names(data.table::fread(file_i, nrows = 0, ...)), file_i)
+          d = data.table::fread(file_i,select = v,...)
+          setnames(d, v, variables)
         }else{
-          d = data.table::fread(file,...)
+          d = data.table::fread(file_i,...)
         }
 
       }else if(ext%in%c("dsv","tsv")){
+        # [v2.0.0] tab-separated as in v1.3; a file whose header has no tab (e.g. the P1380 KUHR files, separated
+        # by ";") is read with the separator that fread detects
+        sep_i = "\t"
+        hdr = names(data.table::fread(file_i, nrows = 0, sep = "\t", ...))
+        if(length(hdr) == 1L){
+          sep_i = "auto"
+          hdr = names(data.table::fread(file_i, nrows = 0, ...))
+        }
         if(!is.null(variables)){
-          d = data.table::fread(file,select = variables,sep = "\t",...)
+          v = match_vars(hdr, file_i)
+          d = data.table::fread(file_i,select = v,sep = sep_i,...)
+          setnames(d, v, variables)
         }else{
-          d = data.table::fread(file,sep = "\t",...)
+          d = data.table::fread(file_i,sep = sep_i,...)
         }
 
       }else{
@@ -1452,10 +1484,9 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
 
   # Still undated: outcome-specific default length, again not before the previous outcome
   # [v1.3.1] outcome-specific default lengths are settings (miscarriage, induced abortion, molar, ectopic)
-  # [v1.4.0] a default may be a year table (year of the outcome), and the induced-abortion default may be
-  # drawn from a distribution (rows in the current order: ID, date_outcome)
-  # [v2.0.0] a table with attribute extrapolate (uio_termination_days_by_year()) extrapolates years outside
-  # its range; those years are reported (warning, summary, report)
+  # [v1.4.0] a default may be a year table (year of the outcome)
+  # [v2.0.0] a table with attribute extrapolate (uio_termination_days_by_year(), the default for induced
+  # abortions) extrapolates years outside its range; those years are reported (warning, summary, report)
   extrapolated = list()
   set_default = function(oc, x, nm = ""){
     if(is.data.frame(x)){
@@ -1470,15 +1501,8 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
       early_nonlive_births[is.na(pr_start_final) & outcome_final == oc, pr_start_final := date_outcome - x]
     }
   }
-  early_nonlive_births[, default_drawn := NA_integer_]
   set_default(2, cfg_miscarriage_default_days, "miscarriage_default_days")
-  if(is.null(cfg_induced_abortion_default_distribution)){
-    set_default(3, cfg_induced_abortion_default_days, "induced_abortion_default_days")
-  }else{
-    i = early_nonlive_births[, which(is.na(pr_start_final) & outcome_final == 3)]
-    drawn = .uio_draw_days(cfg_induced_abortion_default_distribution, early_nonlive_births[i, year(date_outcome)], cfg_random_seed)
-    early_nonlive_births[i, `:=`(pr_start_final = date_outcome - drawn, default_drawn = 1L)]
-  }
+  set_default(3, cfg_induced_abortion_default_days, "induced_abortion_default_days")
   set_default(5, cfg_molar_default_days, "molar_default_days")
   set_default(6, cfg_ectopic_default_days, "ectopic_default_days")
   for(msg in .uio_extrapolation_notes(extrapolated)) warning(msg, call. = FALSE)
@@ -1508,7 +1532,6 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
     outcome_final == 3 & !is.na(prenatal_diagnosis), cfg_label_o35,
     !is.na(pr_start_new), "pregnancy marker",
     !is.na(flag_over12weeks) & is.na(repaired_flag), cfg_label_rejected,
-    !is.na(default_drawn), "fixed outcome-specific default (drawn from distribution)",   # [v1.4.0]
     default = "fixed outcome-specific default")]
   early_nonlive_births[, truncated_at_previous_outcome := !is.na(pr_start_previous) | !is.na(pr_start_new_previous)]
 

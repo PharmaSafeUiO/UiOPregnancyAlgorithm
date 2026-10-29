@@ -15,7 +15,7 @@
 ##  5. the settings change exactly the expected pregnancies, with the expected values
 ##  6. on data without quadruplets (where v1.3 lines 481-482 run) the package works and gives the same
 ##     results; the original v1.3 fails there on data.table >= 1.17 (with=FALSE + := is an error)
-##  7. [v1.4.0] birth weight for stillbirth, year-specific and drawn induced-abortion defaults
+##  7. [v1.4.0] birth weight for stillbirth, year-specific induced-abortion defaults
 ##  8. [v2.0.0] settings as arguments, the defaults, the "and" weight rule, and the former fixed values
 args <- commandArgs(TRUE)
 getarg <- function(name, default) {
@@ -244,13 +244,18 @@ cmp_expected(S$d, exp_d, "(d) differs from v1.3 exactly as expected")
 
 exp_e <- modify(expected_b, data.table(
   ID = c(2L, 3L, 4L, 5L, 6L, 9L), date_outcome = c("2016-03-10", "2017-04-20", "2018-02-14", "2019-05-05", "2019-08-08", "2018-09-09"),
-  outcome = c(2, 2, 3, 2, 2, 2), GA_days = c(150, 84, 49, 70, 70, 74),
+  outcome = c(2, 2, 3, 2, 2, 2), GA_days = c(150, 84, 46, 70, 70, 74),
   dating_method = c("MBRN (recorded GA)", "pregnancy marker", "fixed outcome-specific default", "fixed outcome-specific default", "fixed outcome-specific default", "pregnancy marker")))
-cat("\n(e) all defaults of version 2.0.0 (stillbirth from 154 days, marker rule 119 days, induced-abortion default 49 days, normalize_codes = TRUE)\n")
+cat("\n(e) all defaults of version 2.0.0 (stillbirth from 154 days, marker rule 119 days, induced-abortion default = registry median of the year, normalize_codes = TRUE)\n")
 cat("    expected changes vs v1.3: W2 150-day fetal death -> miscarriage; W3 marker-implied 84 d accepted (< 119);\n",
-    "   W4 abortion without marker 49 d; W5, W6, W9 through the normalised codes.\n")
+    "   W4 abortion without marker 46 d (registry median 2018); W5, W6, W9 through the normalised codes.\n")
 print(changed_rows(S$b, S$e, "e"))
 cmp_expected(S$e, exp_e, "(e) the 2.0.0 defaults differ from v1.3 exactly as expected")
+check("(e) default induced_abortion_default_days = NULL is stored as the registry year table",
+      is.null(uio_default_settings()$induced_abortion_default_days) &&
+        identical(attr(runs$e, "settings")$induced_abortion_default_days$days, as.numeric(uio_termination_days_by_year()$days)) &&
+        isTRUE(attr(attr(runs$e, "settings")$induced_abortion_default_days, "extrapolate")))
+check("(e2) induced_abortion_default_days = NULL given explicitly == the default run", all(same_dt(runs$e, runs$e2)))
 
 ## ---- 6. data without quadruplets (v1.3 lines 481-482 are executed) -----------------------------
 cat("\n== 6. synthetic data WITHOUT the quadruplet pregnancy (W17) ==\n")
@@ -295,19 +300,6 @@ exp_h <- modify(expected_b, data.table(ID = 4L, date_outcome = "2018-02-14", out
 cat("(h) induced_abortion_default_days = table 2015: 47, 2019: 45 -> W4 (2018) gets 47 days (closest earlier year).\n")
 print(changed_rows(S$b, S$h, "h"))
 cmp_expected(S$h, exp_h, "(h) differs from v1.3 exactly as expected")
-w4 <- S$i[ID == 4L]
-cat("(i) drawn default (42-55 days p = 0.8, 56-69 days p = 0.2, seed 7): W4 gets", w4$GA_days, "days\n")
-check("(i) only W4 changes; its length is within 42-69 days and labelled as drawn",
-      nrow(changed_rows(S$b, S$i, "i")) == 1L && w4$GA_days >= 42 && w4$GA_days <= 69 &&
-        w4$dating_method == "fixed outcome-specific default (drawn from distribution)")
-check("(i) repeated with the same seed gives the identical result", all(same_dt(runs$i, runs$i2)))
-check("(i) the caller's random-number state is restored", isTRUE(pk$rng_restored))
-d <- pk$draws
-cat(sprintf("    20,000 draws: %.1f%% in 42-55 days (expected 80%%), range %d-%d, all whole numbers: %s\n",
-            100 * mean(d <= 55), min(d), max(d), all(d == round(d))))
-check("draws follow the distribution (share in 42-55 days within 79-81%; range 42-69; whole numbers)",
-      abs(mean(d <= 55) - 0.8) < 0.01 && min(d) == 42 && max(d) == 69 && all(d == round(d)))
-cat("  invalid distribution gives: ", pk$bad_dist_message, "\n", sep = "")
 check("(j) v1.3 settings after the cache gained the weight column == first run", all(same_dt(runs$b, runs$j)))
 
 ## ---- 8. version 2.0.0 ---------------------------------------------------------------------------
@@ -316,6 +308,11 @@ check("run_uio_pa() argument defaults equal uio_default_settings()", identical(p
 check("settings given as arguments == the same settings in a list ((k) vs (c))", all(same_dt(runs$c, runs$k)))
 cat("  argument and list together give: ", pk$both_message, "\n", sep = "")
 check("a setting given both as an argument and in `settings` is an error", grepl("both as an argument", pk$both_message, fixed = TRUE))
+check("(r) a KUHR column name given in lower case is matched to the file's column: same result as the defaults", all(same_dt(runs$e, runs$r)))
+cat("  missing source column gives: ", pk$missing_col_message, "\n", sep = "")
+check("(s) a missing source column is an error that names the column and lists the file's columns",
+      grepl("PASIENTLOPENUMMER not found in", pk$missing_col_message, fixed = TRUE) &&
+        grepl("Columns of this file: PasientLopeNr_PDB2774", pk$missing_col_message, fixed = TRUE))
 exp_m <- modify(expected_b, data.table(ID = 2L, date_outcome = "2016-03-10", outcome = 2, GA_days = 150, dating_method = "MBRN (recorded GA)"))
 cat("(m) stillbirth_min_days = 154, stillbirth_min_weight_g = 500, rule \"and\": W2 (150 days, 560 g) becomes a miscarriage.\n")
 print(changed_rows(S$b, S$m, "m"))
@@ -325,20 +322,20 @@ cat("(n) same_event_days = 30, marker_lookback_days = 40, o35_window_days = 5: c
 print(changed_rows(S$b, S$n, "n"))
 tt <- pk$term_table
 cat("  uio_termination_days_by_year():\n"); print(tt)
-check("registry table 2015-2024: days 47, 47, 46, 46, 45, 44, 44, 44, 45, 45, marked for extrapolation",
-      identical(tt$year, 2015:2024) && identical(tt$days, c(47, 47, 46, 46, 45, 44, 44, 44, 45, 45)) && isTRUE(attr(tt, "extrapolate")))
+check("registry table 2008-2024: days 48 (2008-2014), 47, 47, 46, 46, 45, 44, 44, 44, 45, 45, marked for extrapolation",
+      identical(tt$year, 2008:2024) && identical(tt$days, c(rep(48, 7), 47, 47, 46, 46, 45, 44, 44, 44, 45, 45)) && isTRUE(attr(tt, "extrapolate")))
 exp_p <- modify(expected_b, data.table(ID = 4L, date_outcome = "2018-02-14", outcome = 3, GA_days = 46, dating_method = "fixed outcome-specific default"))
 cat("(p) induced_abortion_default_days = uio_termination_days_by_year(): W4 (2018) gets 46 days.\n")
 cmp_expected(S$p, exp_p, "(p) differs from v1.3 exactly as expected")
-cat("  extrapolated 2008, 2014, 2018 (listed), 2025, 2040:", pk$extrap_days, "\n")
-check("years outside 2015-2024 follow the trend, kept within 44-47 days (47, 47, 46, 44, 44)", identical(pk$extrap_days, c(47, 47, 46, 44, 44)))
+cat("  extrapolated 2000, 2008 and 2018 (listed), 2025, 2040:", pk$extrap_days, "\n")
+check("years outside 2008-2024 follow the trend, kept within 44-48 days (48, 48, 46, 44, 44)", identical(pk$extrap_days, c(48, 48, 46, 44, 44)))
 check("a table without the attribute is not extrapolated (closest earlier year; first year before)", identical(pk$own_table_days, c(47, 45)))
 exp_q <- modify(expected_b, data.table(ID = 4L, date_outcome = "2018-02-14", outcome = 3, GA_days = 44, dating_method = "fixed outcome-specific default"))
 cat("(q) table 2019-2024 only: W4 (2018) is extrapolated (44 days). Warning:\n ", pk$warn_q, "\n")
 cmp_expected(S$q, exp_q, "(q) the extrapolated year gets the trend value")
-check("(q) the run warns that 2018 is extrapolated and how to return to the fixed default",
+check("(q) the run warns that 2018 is extrapolated and how to use one fixed length instead",
       length(pk$warn_q) == 1L && grepl("2018: 44 days", pk$warn_q, fixed = TRUE) && grepl("EXTRAPOLATED", pk$warn_q, fixed = TRUE) &&
-        grepl("leave out `induced_abortion_default_days` (49 days)", pk$warn_q, fixed = TRUE))
+        grepl("give `induced_abortion_default_days` one number of days", pk$warn_q, fixed = TRUE))
 check("(n) the changed values are stored in the settings",
       identical(attr(runs$n, "settings")[c("same_event_days", "marker_lookback_days", "o35_window_days")],
                 list(same_event_days = 30, marker_lookback_days = 40, o35_window_days = 5)))

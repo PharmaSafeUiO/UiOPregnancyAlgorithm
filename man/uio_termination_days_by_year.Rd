@@ -11,38 +11,40 @@ A data frame with columns \code{year}, \code{days} (whole days) and \code{median
 attribute \code{extrapolate = TRUE}.
 }
 \description{
-A year table for \code{induced_abortion_default_days} (see \code{\link[=uio_default_settings]{uio_default_settings()}}): the median
-gestational age of induced abortions in Norway in each year 2015-2024, from the Registry of
-Pregnancy Termination. It is not the default: by default every undated induced abortion gets one
-fixed length (\code{induced_abortion_default_days = 49}).
+The default of \code{induced_abortion_default_days} (see \code{\link[=uio_default_settings]{uio_default_settings()}}): the median
+gestational age of induced abortions in Norway in each year 2008-2024, from the Registry of
+Pregnancy Termination. \code{induced_abortion_default_days = NULL} (the default) uses this table; one
+number gives every undated induced abortion one fixed length instead.
 }
 \details{
-\strong{Source.} Norwegian Institute of Public Health (FHI), \emph{Rapport om svangerskapsavbrot for 2024}
-(corrected May 2026), Tabell 6: induced abortions by gestational week group (0-6, 7-8, 9-10, ...
-weeks). The registry counts weeks ordinally (week \code{n} = days \code{7(n-1)} to \verb{7n-1}), so weeks 7-8
-are days 42-55.
+\strong{Source.} Norwegian Institute of Public Health (FHI), Tabell 6 (induced abortions by gestational
+week group 0-6, 7-8, 9-10, ... weeks) of the yearly reports on pregnancy termination, each year from
+the latest report that gives it: 2015-2024 from \emph{Rapport om svangerskapsavbrot 2024} (corrected May
+2026); 2009-2014 from \emph{Rapport om svangerskapsavbrot for 2018}; 2008 from \emph{Rapport om
+svangerskapsavbrot for 2017}. The registry counts weeks ordinally (week \code{n} = days \code{7(n-1)} to
+\verb{7n-1}; the 2024 report: week 12 is 11+0 to 11+6 weeks), so weeks 7-8 are days 42-55.
 
 \strong{Method.} In every year the median lies in weeks 7-8. It is interpolated linearly within that
 group, \code{42 + 14 * (N / 2 - n[0-6]) / n[7-8]}, where \code{N} excludes abortions with unknown gestational
 age, and rounded to whole days (\code{days}; the unrounded value is in \code{median_days}). The interpolation
 assumes that abortions are spread evenly over days 42-55, so the values are approximate.
 
-\strong{Years outside 2015-2024 are extrapolated.} The table carries the attribute
-\code{extrapolate = TRUE}. For an outcome year before 2015 or after 2024, the value comes from the
+\strong{Years outside 2008-2024 are extrapolated.} The table carries the attribute
+\code{extrapolate = TRUE}. For an outcome year before 2008 or after 2024, the value comes from the
 linear trend of \code{days} over the listed years (least squares), rounded to whole days and kept within
-the range of the table (44-47 days), so that the trend does not run away. \code{\link[=run_uio_pa]{run_uio_pa()}} then
+the range of the table (44-48 days), so that the trend does not run away. \code{\link[=run_uio_pa]{run_uio_pa()}} then
 warns which years were extrapolated and with which values, and adds a note to the summary and the
 report. An extrapolated value is an assumption, not registry data.
 
-To go back to the fixed default, leave out \code{induced_abortion_default_days} (49 days) or give it
-one number of days. A table of your own (data frame with \code{year} and \code{days}) is used without
+To use one fixed length instead, give \code{induced_abortion_default_days} one number of days (for
+example \code{49}, 7+0 weeks). A table of your own (data frame with \code{year} and \code{days}) is used without
 extrapolation (a year that is not listed takes the closest earlier listed year), unless you set
 \code{attr(tab, "extrapolate") <- TRUE}.
 }
 \examples{
 uio_termination_days_by_year()
 \dontrun{
-run_uio_pa(workdir = wd, source_files = src,
-           induced_abortion_default_days = uio_termination_days_by_year())
+run_uio_pa(workdir = wd, source_files = src)                                     # this table
+run_uio_pa(workdir = wd, source_files = src, induced_abortion_default_days = 49)  # fixed 49 days
 }
 }

@@ -32,7 +32,8 @@ fwrite(kuhr[PASIENT_KJONN == 2, .(pasientlopenr_MOR = PasientLopeNr_PDB2774, dia
 res$p704 <- run("p704", uio_project_sources("p704", raw_dir = r704))
 
 ## P1380 layout: MBRN as SPSS with text dates ("mdy HMS"); NPR as six contact files (sex in column 7 in SOM, 6 in the
-## others) with code files (the PHBU code file has no code-system column); KUHR tab-separated with dates as yyyymmdd.
+## others) with code files (the PHBU code file has no code-system column); KUHR separated by ";" (one file per year,
+## as delivered in 2024) and one tab-separated file, with dates as yyyymmdd.
 ## The seven P1111 NPR parts are spread over the six P1380 parts.
 parts <- c(SOM = "som", AVTSOM = "avtsom", PHBU = "phbu", PHV = "phv", AVTPHV = "avtphv", TSB = "tsb")
 r1380 <- file.path(p$tmp, "raw_p1380"); for (d in c("MBRN", paste0("NPR/", names(parts)), "KUHR")) dir.create(file.path(r1380, d), recursive = TRUE, showWarnings = FALSE)
@@ -51,8 +52,14 @@ for (up in names(parts)) {
   if (pt == "phbu") cd[, kodenavn := NULL]
   fwrite(cd, file.path(r1380, "NPR", up, if (pt == "som") "SOM_ICD10.csv" else paste0(up, "_koder.csv")))
 }
-fwrite(kuhr[, .(PASIENTLOPENUMMER = PasientLopeNr_PDB2774, DIAGNOSE_KODE, DIAGNOSEKODEVERK,
-                DATO = format(ref0 + DIFFERANSEDAGER, "%Y%m%d"), PASIENT_KJONN)], file.path(r1380, "KUHR", "kuhr_2024.dsv"), sep = "\t")
+# KUHR as in the 2024 delivery: one file per year separated by ";" with all its columns; one file tab-separated
+k1380 <- kuhr[, .(PASIENTLOPENUMMER = PasientLopeNr_PDB2774, FAGOMRAADE_KODE = "LE", PRAKSISTYPE = 1L, SPESIALITET = 1L,
+                  BEHANDLER_FYLKE = 3L, PASIENTFYLKE = 3L, PASIENT_KJONN, ALDER = 30L, DATO = format(ref0 + DIFFERANSEDAGER, "%Y%m%d"),
+                  DIAGNOSE_KODE, ERHOVEDDIAGNOSE = 1L, DIAGNOSEKODEVERK)]
+k_tab <- seq_len(nrow(k1380)) %% 2L == 0L
+for (yr in unique(substr(k1380$DATO[!k_tab], 1, 4)))
+  fwrite(k1380[!k_tab][substr(DATO, 1, 4) == yr], file.path(r1380, "KUHR", paste0(yr, " Data fra KUHR 20-31226.dsv")), sep = ";")
+fwrite(k1380[k_tab, .(PASIENTLOPENUMMER, DIAGNOSE_KODE, DIAGNOSEKODEVERK, DATO, PASIENT_KJONN)], file.path(r1380, "KUHR", "kuhr_tab.dsv"), sep = "\t")
 res$p1380 <- run("p1380", uio_project_sources("p1380", raw_dir = r1380))
 
 ## Generic layout: MBRN with real dates as text ("dmy"); NPR as one long file and KUHR, both with day offsets from

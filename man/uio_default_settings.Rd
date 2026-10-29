@@ -77,12 +77,13 @@ an MBRN birth or before or after another non-live outcome. Default \code{56} (8 
 version 1.3.}
 \item{\code{induced_abortion_default_days}}{Pregnancy length of an induced abortion (outcome 3)
 without any dating information (no MBRN gestational age, no accepted marker, no rejected
-marker, no O35 code). Default \code{49} (7+0 weeks). Either one number for all years, or a data
-frame with columns \code{year} and \code{days} (one row per year of the outcome) for year-specific
-defaults: a year that is not listed takes the value of the closest earlier listed year, and
-years before the first listed year take the first value. \code{\link[=uio_termination_days_by_year]{uio_termination_days_by_year()}}
-gives such a table from the Registry of Pregnancy Termination (2015-2024); with it, years
-outside 2015-2024 are extrapolated from its trend, with a warning.}
+marker, no O35 code). Default \code{NULL}: the year table \code{\link[=uio_termination_days_by_year]{uio_termination_days_by_year()}}, the
+median gestational age of induced abortions in the year of the outcome from the Registry of
+Pregnancy Termination (2008-2024); years outside 2008-2024 are extrapolated from its trend,
+with a warning. One number gives a fixed length for all years (for example \code{49}, 7+0 weeks).
+A data frame with columns \code{year} and \code{days} (one row per year of the outcome) gives your own
+year table: a year that is not listed takes the value of the closest earlier listed year, and
+years before the first listed year take the first value.}
 \item{\code{miscarriage_default_days}}{Same for a miscarriage (outcome 2). Default \code{70} (10+0 weeks).}
 \item{\code{molar_default_days}}{Same for a molar pregnancy (outcome 5). Default \code{77} (11+0 weeks).}
 \item{\code{ectopic_default_days}}{Same for an ectopic pregnancy (outcome 6). Default \code{56} (8+0 weeks).}
@@ -92,17 +93,6 @@ recorded from the abortion date up to \code{o35_window_days} days after it. Defa
 replaces a marker-based start.}
 \item{\code{o35_window_days}}{See \code{o35_induced_days}. Default \code{27} (O35 recorded 0-27 days after the
 abortion), as in version 1.3.}
-\item{\code{induced_abortion_default_distribution}}{\code{NULL} (default) or a data frame with columns
-\code{days_min}, \code{days_max} and \code{prob}, and optionally \code{year}. If given, it replaces
-\code{induced_abortion_default_days}: each induced abortion without dating information gets a
-pregnancy length drawn from it (a row with probability \code{prob}, then a whole number of days
-uniformly from \code{days_min} to \code{days_max}), so that one fixed value does not create a spike.
-With a \code{year} column the rows of the outcome's year are used (a year that is not listed takes
-the closest earlier listed year); \code{prob} is rescaled to sum to 1 within each year. These
-pregnancies have \code{dating_method} \code{"fixed outcome-specific default (drawn from distribution)"}.}
-\item{\code{random_seed}}{Seed of the draws from \code{induced_abortion_default_distribution}, so that a
-run can be repeated exactly. The caller's random-number state is restored afterwards.
-Default \code{1}.}
 \item{\code{normalize_codes}}{If \code{TRUE} (default), the NPR (\code{tilst}) and KUHR (\code{diagnose}) diagnosis
 codes are normalised in memory after loading, as \code{toupper(gsub("[^A-Za-z0-9]", "", code))},
 so that \code{"Z32.1"}, \code{"z321"} or \code{"Z32 1"} all match \code{"Z321"}. The marker lists are normalised

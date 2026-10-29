@@ -16,14 +16,12 @@ run_uio_pa(
   marker_rejection_days = 119,
   marker_lookback_days = 70,
   same_event_days = 56,
-  induced_abortion_default_days = 49,
+  induced_abortion_default_days = NULL,
   miscarriage_default_days = 70,
   molar_default_days = 77,
   ectopic_default_days = 56,
   o35_induced_days = 80,
   o35_window_days = 27,
-  induced_abortion_default_distribution = NULL,
-  random_seed = 1,
   normalize_codes = TRUE,
   settings = NULL,
   output_dir = file.path(workdir, "output"),
@@ -64,19 +62,14 @@ Default \code{70}.}
 
 \item{same_event_days}{Records less than this many days apart are the same event. Default \code{56}.}
 
-\item{induced_abortion_default_days, miscarriage_default_days, molar_default_days, ectopic_default_days}{Pregnancy length in days when nothing else dates the pregnancy. Defaults \code{49}, \code{70}, \code{77},
-\code{56}. One number, or a data frame with columns \code{year} and \code{days}.}
+\item{induced_abortion_default_days, miscarriage_default_days, molar_default_days, ectopic_default_days}{Pregnancy length in days when nothing else dates the pregnancy. Defaults \code{NULL} (induced
+abortions: the median of the outcome year, \code{\link[=uio_termination_days_by_year]{uio_termination_days_by_year()}}), \code{70}, \code{77}, \code{56}.
+One number, or a data frame with columns \code{year} and \code{days}.}
 
 \item{o35_induced_days}{Length of an induced abortion with an O35 code. Default \code{80}.}
 
 \item{o35_window_days}{The O35 code must be recorded from the abortion date up to this many
 days after it. Default \code{27}.}
-
-\item{induced_abortion_default_distribution}{\code{NULL} (default) or a data frame (\code{days_min},
-\code{days_max}, \code{prob}, optional \code{year}) from which the length of undated induced abortions is
-drawn.}
-
-\item{random_seed}{Seed for those draws. Default \code{1}.}
 
 \item{normalize_codes}{Normalise diagnosis codes (upper case, letters and digits only) before
 matching. Default \code{TRUE}.}
@@ -121,9 +114,8 @@ her birth year estimated from her MBRN records (\code{NA} without an MBRN record
 5 NPR+KUHR, 6 NPR, 7 KUHR.}
 \item{\code{TOP_source}}{Sources of an induced abortion: 2 MBRN+NPR, 4 MBRN, 6 NPR.}
 \item{\code{dating_method}}{\code{"MBRN (recorded GA)"}, \code{"pregnancy marker"},
-\code{"fixed 80 d (TOP with O35)"}, \code{"fixed 119 d (marker >= 17 wk rejected)"},
-\code{"fixed outcome-specific default"} or
-\code{"fixed outcome-specific default (drawn from distribution)"} (the numbers follow the settings).}
+\code{"fixed 80 d (TOP with O35)"}, \code{"fixed 119 d (marker >= 17 wk rejected)"} or
+\code{"fixed outcome-specific default"} (the numbers follow the settings).}
 \item{\code{truncated_at_previous_outcome}}{\code{TRUE} if the start was moved to the woman's previous
 outcome date.}
 }
@@ -164,7 +156,8 @@ for the first marker in priority order that is recorded within \code{marker_look
 \code{marker_rejection_days}; (c) if markers were found but
 all were rejected, \code{marker_rejection_days}; (d) otherwise the outcome-specific default
 (\code{induced_abortion_default_days}, \code{miscarriage_default_days}, \code{molar_default_days},
-\code{ectopic_default_days}, or a draw from \code{induced_abortion_default_distribution}). A start
+\code{ectopic_default_days}; for induced abortions by default the median of the year of the outcome
+in the Registry of Pregnancy Termination, see \code{\link[=uio_termination_days_by_year]{uio_termination_days_by_year()}}). A start
 before the woman's previous outcome is moved to that outcome date
 (\code{truncated_at_previous_outcome}).
 }
@@ -174,7 +167,7 @@ before the woman's previous outcome is moved to that outcome date
 
 The start date is \strong{day 0}; the gestational age at the outcome is
 \code{GA_event_days_final = date_outcome - pr_start_final} (days) and
-\code{GA_event_week_final = floor(GA_event_days_final / 7)} (completed weeks). A default of 49 days
+\code{GA_event_week_final = floor(GA_event_days_final / 7)} (completed weeks). A length of 49 days
 therefore puts the outcome at 7+0 weeks, which the Norwegian registries count as week 8
 (ordinal weeks: week \code{n} = days \code{7(n-1)} to \verb{7n-1}). All windows are in whole days; "within
 \code{d} days before the outcome" includes the outcome date and the day \code{d} days before it.
@@ -222,6 +215,8 @@ res <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src)
 # sensitivity analyses
 res_ga <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
                      stillbirth_min_weight_g = NULL)    # stillbirth by gestational age only
+res_49 <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
+                     induced_abortion_default_days = 49) # one fixed length for undated abortions
 
 # version 1.3
 res13 <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,

@@ -16,7 +16,8 @@
 ##      154 days or 500 g; miscarriage with weight_first and 600 g)
 ##   3  NPR miscarriage O039 with marker Z321 20 days before (implied GA 20 + 64 = 84 days: rejected by
 ##      the 84-day rule, so dated 84 d; accepted with marker_rejection_days = 91)
-##   4  NPR induced abortion O049 without marker (56 d; 49 d with induced_abortion_default_days = 49)
+##   4  NPR induced abortion O049 without marker (56 d in v1.3; 49 d with induced_abortion_default_days = 49;
+##      46 d with the default, the registry median of 2018)
 ##   5  KUHR miscarriage coded "w82" (lower case): missed by v1.3, found with normalize_codes = TRUE
 ##   6  KUHR miscarriage coded "W 82" (space): idem
 ##   7  NPR induced abortion O049 with O359 the same day (O35 rule: 80 d)

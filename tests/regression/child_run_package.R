@@ -53,6 +53,8 @@ runs$f <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023
 mbrn_cols_after_f <- names(data.table::fread(file.path(p$workdir, "birth_registry_full.csv"), nrows = 0))
 # (e) all defaults (version 2.0.0: stillbirth from 154 days and 500 g, marker rule 119 days, normalize_codes = TRUE)
 runs$e <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023))
+# (e2) the default of induced_abortion_default_days (NULL = registry year table) given explicitly
+runs$e2 <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023), induced_abortion_default_days = NULL)
 # (o) defaults with the output folder and the printed summary
 out_dir <- file.path(dirname(p$workdir), "output_o")
 runs$o <- run_uio_pa(workdir = p$workdir, source_files = src, years_range = c(2008, 2023), output_dir = out_dir)
@@ -83,19 +85,9 @@ runs$q <- withCallingHandlers(rp(workdir = p$workdir, source_files = src, years_
                                  settings = modifyList(v13, list(induced_abortion_default_days = tab_q))),
                               warning = function(w) { warn_q <<- c(warn_q, conditionMessage(w)); invokeRestart("muffleWarning") })
 term_table <- uio_termination_days_by_year()
-extrap_days <- UiOPregnancyAlgorithm:::.uio_days_for_years(term_table, c(2008, 2014, 2018, 2025, 2040))
+extrap_days <- UiOPregnancyAlgorithm:::.uio_days_for_years(term_table, c(2000, 2008, 2018, 2025, 2040))
 own_table_days <- UiOPregnancyAlgorithm:::.uio_days_for_years(data.frame(year = c(2015, 2019), days = c(47, 45)), c(2008, 2030))
-dist <- data.frame(days_min = c(42, 56), days_max = c(55, 69), prob = c(0.8, 0.2))
-set.seed(99); seed_before <- .Random.seed
-runs$i <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
-                     settings = modifyList(v13, list(induced_abortion_default_distribution = dist, random_seed = 7)))
-rng_restored <- identical(.Random.seed, seed_before)
-runs$i2 <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
-                      settings = modifyList(v13, list(induced_abortion_default_distribution = dist, random_seed = 7)))
 runs$j <- rp(workdir = p$workdir, source_files = src, settings = v13, years_range = c(2008, 2023))   # v1.3 settings, cache with weight
-draws <- UiOPregnancyAlgorithm:::.uio_draw_days(dist, rep(2018, 20000), 7)
-bad_dist <- tryCatch(rp(workdir = p$empty_dir, source_files = src, settings = list(induced_abortion_default_distribution = data.frame(days_min = 50, days_max = 40, prob = 1))),
-                     error = function(e) conditionMessage(e))
 
 # working directory is restored also when the run fails
 err <- tryCatch(rp(workdir = p$empty_dir, source_files = uio_project_sources("p1111", raw_dir = file.path(p$empty_dir, "nope"))),
@@ -107,14 +99,21 @@ bad <- tryCatch(rp(workdir = p$empty_dir, source_files = src, settings = list(in
 # a setting given both as an argument and in `settings` is rejected
 both <- tryCatch(rp(workdir = p$empty_dir, source_files = src, induced_abortion_default_days = 49, settings = list(induced_abortion_default_days = 56)),
                  error = function(e) conditionMessage(e))
+# (r) [v2.0.0] a source column whose name differs only in case is used; (s) a missing column names the file and its columns
+src_r <- src; src_r$primary_care$variables["mother_id"] <- tolower(src_r$primary_care$variables["mother_id"])
+wd_r <- file.path(dirname(p$workdir), "wd_case"); dir.create(wd_r, showWarnings = FALSE)
+runs$r <- rp(workdir = wd_r, source_files = src_r, years_range = c(2008, 2023))
+src_s <- src; src_s$primary_care$variables["mother_id"] <- "PASIENTLOPENUMMER"
+wd_s <- file.path(dirname(p$workdir), "wd_missing_col"); dir.create(wd_s, showWarnings = FALSE)
+missing_col <- tryCatch(rp(workdir = wd_s, source_files = src_s, years_range = c(2008, 2023)), error = function(e) conditionMessage(e))
 
 saveRDS(list(runs = runs, cache_before = cache_before, cache_after = cache_after,
              error_message = err, wd_restored_after_error = wd_restored_after_error,
-             bad_setting_message = bad, both_message = both,
+             bad_setting_message = bad, both_message = both, missing_col_message = missing_col,
              formals_defaults = lapply(formals(run_uio_pa)[names(uio_default_settings())], eval),
              uio_v13_settings = uio_v13_settings(),
              mbrn_cols_after_f = mbrn_cols_after_f, out_files = out_files, out_rds_equal = out_rds_equal,
-             outcomes_csv = outcomes_csv, avail_csv = avail_csv, html = html, summary_text = summary_text, rng_restored = rng_restored, draws = draws, bad_dist_message = bad_dist,
+             outcomes_csv = outcomes_csv, avail_csv = avail_csv, html = html, summary_text = summary_text,
              uio_source_files_default = uio_project_sources("p1111"),
              uio_hospital_codes = uio_hospital_codes(),
              uio_primary_care_codes = uio_primary_care_codes(),

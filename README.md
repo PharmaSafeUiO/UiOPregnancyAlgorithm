@@ -92,40 +92,33 @@ the main analysis of the four-algorithm comparison, with birth weight added to t
 | `marker_rejection_days` | `119` | a marker-based estimate of 119 days (17 weeks) or more is rejected and the next marker tried; if all are rejected the pregnancy gets 119 days |
 | `marker_lookback_days` | `70` | markers are searched from this many days before the outcome |
 | `same_event_days` | `56` | records less than 56 days apart are the same event (repeated contacts for one miscarriage or abortion; records shortly after a birth) |
-| `induced_abortion_default_days` | `49` | length of an induced abortion without dating information (7+0 weeks); one number or a table by year (see below) |
+| `induced_abortion_default_days` | `NULL` | length of an induced abortion without dating information; `NULL` = the median of the outcome year in the Registry of Pregnancy Termination (44–48 days, see below), one number = a fixed length (for example `49`, 7+0 weeks), or your own table by year |
 | `miscarriage_default_days` | `70` | idem, miscarriage (10+0 weeks) |
 | `molar_default_days` | `77` | idem, molar pregnancy (11+0 weeks) |
 | `ectopic_default_days` | `56` | idem, ectopic pregnancy (8+0 weeks) |
 | `o35_induced_days` | `80` | length of an induced abortion with an O35 code (prenatal diagnosis) |
 | `o35_window_days` | `27` | the O35 code must be recorded 0–27 days after the abortion |
-| `induced_abortion_default_distribution` | `NULL` | draw the length of undated induced abortions from a distribution instead of one value |
-| `random_seed` | `1` | seed for those draws |
 | `normalize_codes` | `TRUE` | match diagnosis codes after removing dots and spaces and converting to upper case (`"Z32.1"` = `"Z321"`) |
 
 ```r
 # sensitivity analyses
-run_uio_pa(workdir = wd, source_files = src,
-           induced_abortion_default_days = uio_termination_days_by_year())   # year table, see below
-run_uio_pa(workdir = wd, source_files = src, stillbirth_min_weight_g = NULL)    # gestational age only
+run_uio_pa(workdir = wd, source_files = src, induced_abortion_default_days = 49)   # one fixed length
+run_uio_pa(workdir = wd, source_files = src, stillbirth_min_weight_g = NULL)        # gestational age only
 ```
 
 ### Year-specific default for induced abortions
 
 `uio_termination_days_by_year()` gives the median gestational age of induced abortions in Norway for
-each year 2015–2024 (44–47 days), from the Registry of Pregnancy Termination (FHI, *Rapport om
-svangerskapsavbrot for 2024*, Tabell 6; interpolated within weeks 7–8). It is an option, not the
-default:
+each year 2008–2024 (44–48 days), from the Registry of Pregnancy Termination (FHI, Tabell 6 of the
+reports for 2024, 2018 and 2017; interpolated within weeks 7–8). It is the default
+(`induced_abortion_default_days = NULL`): an undated induced abortion gets the median of the year of
+its outcome.
 
-```r
-run_uio_pa(workdir = wd, source_files = src,
-           induced_abortion_default_days = uio_termination_days_by_year())
-```
-
-Outcome years before 2015 or after 2024 have no registry value. Their values are **extrapolated**
-from the linear trend of the table, rounded and kept within 44–47 days. The run then gives a warning
+Outcome years before 2008 or after 2024 have no registry value. Their values are **extrapolated**
+from the linear trend of the table, rounded and kept within 44–48 days. The run then gives a warning
 that lists these years and values, and the same note appears in the printed summary and the HTML
-report. To go back to the fixed default, leave out `induced_abortion_default_days` (49 days) or give
-it one number.
+report. To give every undated induced abortion one fixed length instead, give
+`induced_abortion_default_days` one number of days (for example `49`).
 
 ## Pregnancy markers
 
@@ -167,7 +160,7 @@ src <- uio_source_files(
                 apgar5 = "APGAR5"),
     dates = uio_dates(format = "dmy")),
   hospital = uio_source("N:/durable/data/npr_diagnoses.csv",            # one row per diagnosis
-    columns = c(mother_id = "ID", diagnose_code = "ICD10", visit_date = "INNDATO"),
+    columns = c(mother_id = "ID", diagnose_code = "ICD10", visit_date = "INNDATO", gender = "KJONN"),
     dates = uio_dates(ref_date = "2000-01-01")),
   primary_care = uio_source("N:/durable/data/kuhr/.*[.]csv",            # all matching files
     columns = c(mother_id = "ID", diagnose_code = "DIAGNOSE", vocabulary = "KODEVERK",
@@ -217,8 +210,10 @@ person_id,ref_date
 Other column names: `uio_dates(ref_dates = "file.csv", person_id = "LOPENR", ref_column = "REFDATO")`.
 
 Files can be `.csv`, `.txt`, tab-separated `.dsv`/`.tsv`, Stata `.dta` or SPSS `.sav`. The NPR must
-be one row per diagnosis (`mother_id`, `diagnose_code`, `visit_date`); with a `gender` column only
-women are kept (`female_value = 2` by default). `?uio_source` lists all columns.
+be one row per diagnosis (`mother_id`, `diagnose_code`, `visit_date`). In the NPR and KUHR extracts,
+a `gender` column keeps only women (`female_value = 2` by default, set per extract in `uio_source()`);
+without it, all records are taken as women's. The MBRN extract has no gender filter. `?uio_source`
+lists all columns.
 
 The package includes all women in the registries, with no age limit. Restrict the study
 population (for example to women aged 12–55 years) after the run.

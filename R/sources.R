@@ -26,12 +26,14 @@
 #'     `birth_year_limit`). `uio_mbrn_columns()` gives the names of the current MBRN deliveries.}
 #'   \item{`hospital`}{`mother_id`, `diagnose_code` (ICD-10, e.g. `"O039"` or `"O03.9"`),
 #'     `visit_date`. Optional: `vocabulary` (coding system; all `"ICD-10"` if not given),
-#'     `stay_id`, `gender`, `birth_year`.}
+#'     `stay_id`, `gender` (all women if not given), `birth_year`.}
 #'   \item{`primary_care`}{`mother_id`, `diagnose_code`, `vocabulary` (`"ICD-10"` or
 #'     `"ICPC-2"`), `visit_date`. Optional: `gender` (all women if not given), `birth_year`.}
 #' }
-#' The woman's ID must be the same in the three extracts. With `gender`, only women are kept
-#' (`female_value`, default 2 as in the Norwegian registries).
+#' The woman's ID must be the same in the three extracts. In the NPR and KUHR extracts (`hospital`
+#' and `primary_care`), a `gender` column keeps only women: the rows whose value equals that
+#' extract's `female_value` (default 2 as in the Norwegian registries). The MBRN extract has no
+#' gender filter.
 #'
 #' @section Files:
 #' `file` is a path whose file-name part is a regular expression: all matching files in the folder
@@ -46,7 +48,7 @@
 #' @param dates How the dates are stored, see [uio_dates()].
 #' @param birth_year_limit `NULL` or `c(first, last)`: keep women born in these years (needs the
 #'   `birth_year` column).
-#' @param female_value Value of the `gender` column for women. Default `2`.
+#' @param female_value Value of the `gender` column for women, in an NPR or KUHR extract. Default `2`.
 #' @return `uio_source()`: the definition of one extract. `uio_source_files()` and
 #'   `uio_project_sources()`: a list with `birth_registry`, `hospital` and `primary_care`, for the
 #'   argument `source_files` of [run_uio_pa()].

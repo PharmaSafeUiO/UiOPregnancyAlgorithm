@@ -60,12 +60,13 @@
 #'     version 1.3.}
 #'   \item{`induced_abortion_default_days`}{Pregnancy length of an induced abortion (outcome 3)
 #'     without any dating information (no MBRN gestational age, no accepted marker, no rejected
-#'     marker, no O35 code). Default `49` (7+0 weeks). Either one number for all years, or a data
-#'     frame with columns `year` and `days` (one row per year of the outcome) for year-specific
-#'     defaults: a year that is not listed takes the value of the closest earlier listed year, and
-#'     years before the first listed year take the first value. [uio_termination_days_by_year()]
-#'     gives such a table from the Registry of Pregnancy Termination (2015-2024); with it, years
-#'     outside 2015-2024 are extrapolated from its trend, with a warning.}
+#'     marker, no O35 code). Default `NULL`: the year table [uio_termination_days_by_year()], the
+#'     median gestational age of induced abortions in the year of the outcome from the Registry of
+#'     Pregnancy Termination (2008-2024); years outside 2008-2024 are extrapolated from its trend,
+#'     with a warning. One number gives a fixed length for all years (for example `49`, 7+0 weeks).
+#'     A data frame with columns `year` and `days` (one row per year of the outcome) gives your own
+#'     year table: a year that is not listed takes the value of the closest earlier listed year, and
+#'     years before the first listed year take the first value.}
 #'   \item{`miscarriage_default_days`}{Same for a miscarriage (outcome 2). Default `70` (10+0 weeks).}
 #'   \item{`molar_default_days`}{Same for a molar pregnancy (outcome 5). Default `77` (11+0 weeks).}
 #'   \item{`ectopic_default_days`}{Same for an ectopic pregnancy (outcome 6). Default `56` (8+0 weeks).}
@@ -75,17 +76,6 @@
 #'     replaces a marker-based start.}
 #'   \item{`o35_window_days`}{See `o35_induced_days`. Default `27` (O35 recorded 0-27 days after the
 #'     abortion), as in version 1.3.}
-#'   \item{`induced_abortion_default_distribution`}{`NULL` (default) or a data frame with columns
-#'     `days_min`, `days_max` and `prob`, and optionally `year`. If given, it replaces
-#'     `induced_abortion_default_days`: each induced abortion without dating information gets a
-#'     pregnancy length drawn from it (a row with probability `prob`, then a whole number of days
-#'     uniformly from `days_min` to `days_max`), so that one fixed value does not create a spike.
-#'     With a `year` column the rows of the outcome's year are used (a year that is not listed takes
-#'     the closest earlier listed year); `prob` is rescaled to sum to 1 within each year. These
-#'     pregnancies have `dating_method` `"fixed outcome-specific default (drawn from distribution)"`.}
-#'   \item{`random_seed`}{Seed of the draws from `induced_abortion_default_distribution`, so that a
-#'     run can be repeated exactly. The caller's random-number state is restored afterwards.
-#'     Default `1`.}
 #'   \item{`normalize_codes`}{If `TRUE` (default), the NPR (`tilst`) and KUHR (`diagnose`) diagnosis
 #'     codes are normalised in memory after loading, as `toupper(gsub("[^A-Za-z0-9]", "", code))`,
 #'     so that `"Z32.1"`, `"z321"` or `"Z32 1"` all match `"Z321"`. The marker lists are normalised
@@ -111,14 +101,12 @@ uio_default_settings <- function() {
     marker_rejection_days         = 119,
     marker_lookback_days          = 70,
     same_event_days               = 56,
-    induced_abortion_default_days = 49,
+    induced_abortion_default_days = NULL,     # NULL = uio_termination_days_by_year()
     miscarriage_default_days      = 70,
     molar_default_days            = 77,
     ectopic_default_days          = 56,
     o35_induced_days              = 80,
     o35_window_days               = 27,
-    induced_abortion_default_distribution = NULL,
-    random_seed                   = 1,
     normalize_codes               = TRUE
   )
 }
@@ -154,6 +142,7 @@ uio_v13_settings <- function() {
   year_settings <- c("induced_abortion_default_days", "miscarriage_default_days", "molar_default_days", "ectopic_default_days")
   for (nm in year_settings) {
     v <- out[[nm]]
+    if (is.null(v) && nm == "induced_abortion_default_days") v <- uio_termination_days_by_year()   # NULL = the registry table
     if (is.data.frame(v)) {
       if (!all(c("year", "days") %in% names(v)) || !nrow(v) || !is_whole_vec(v$year) || !is_whole_vec(v$days) || anyDuplicated(v$year))
         stop("Setting `", nm, "` as a table must be a data frame with columns `year` and `days` (whole numbers, one row per year).", call. = FALSE)
@@ -164,7 +153,8 @@ uio_v13_settings <- function() {
       if (ext) attr(v, "extrapolate") <- TRUE
       out[[nm]] <- v
     } else if (!is_whole_days(v)) {
-      stop("Setting `", nm, "` must be a single non-negative whole number of days, or a data frame with columns `year` and `days`.", call. = FALSE)
+      stop("Setting `", nm, "` must be a single non-negative whole number of days, or a data frame with columns `year` and `days`",
+           if (nm == "induced_abortion_default_days") " (or NULL for uio_termination_days_by_year())", ".", call. = FALSE)
     } else out[[nm]] <- as.numeric(v)
   }
   for (nm in c("o35_induced_days", "o35_window_days", "marker_rejection_days", "marker_lookback_days", "same_event_days")) {
@@ -174,23 +164,6 @@ uio_v13_settings <- function() {
   }
   if (out$same_event_days < 2)
     stop("Setting `same_event_days` must be at least 2.", call. = FALSE)
-  dd <- out$induced_abortion_default_distribution
-  if (!is.null(dd)) {
-    if (!is.data.frame(dd) || !all(c("days_min", "days_max", "prob") %in% names(dd)) || !nrow(dd) ||
-        !is_whole_vec(dd$days_min) || !is_whole_vec(dd$days_max) || any(dd$days_max < dd$days_min) ||
-        !is.numeric(dd$prob) || any(is.na(dd$prob) | dd$prob < 0) || ("year" %in% names(dd) && !all(is.na(dd$year)) && !is_whole_vec(dd$year)))
-      stop("Setting `induced_abortion_default_distribution` must be NULL or a data frame with columns `days_min`, `days_max` ",
-           "(whole numbers, days_max >= days_min), `prob` (non-negative) and optionally `year`.", call. = FALSE)
-    yr <- if ("year" %in% names(dd)) as.numeric(dd$year) else rep(NA_real_, nrow(dd))
-    tot <- tapply(dd$prob, ifelse(is.na(yr), -1, yr), sum)
-    if (any(tot <= 0))
-      stop("Setting `induced_abortion_default_distribution`: `prob` must have a positive sum (in each year).", call. = FALSE)
-    out["induced_abortion_default_distribution"] <- list(data.frame(year = yr, days_min = as.numeric(dd$days_min),
-                                                                    days_max = as.numeric(dd$days_max), prob = as.numeric(dd$prob)))
-  }
-  if (!is_whole_days(out$random_seed))
-    stop("Setting `random_seed` must be a single non-negative whole number.", call. = FALSE)
-  out$random_seed <- as.numeric(out$random_seed)
   if (!is.null(out$stillbirth_min_weight_g)) {
     v <- out$stillbirth_min_weight_g
     if (!is.numeric(v) || length(v) != 1L || is.na(v) || !is.finite(v) || v <= 0)
@@ -232,34 +205,4 @@ uio_v13_settings <- function() {
     if (any(out)) d[out] <- .uio_extrapolate_days(x, years[out])
   }
   d
-}
-
-# Pregnancy lengths drawn from a distribution (internal). `dist` has year (NA = all years),
-# days_min, days_max and prob. For each pregnancy one row is drawn (probability prob, rescaled within
-# the year), then a whole number of days uniformly in [days_min, days_max]. The draws follow the order
-# of `years` after set.seed(seed); the caller's random-number state is restored on exit.
-.uio_draw_days <- function(dist, years, seed) {
-  n <- length(years)
-  if (n == 0L) return(numeric(0))
-  genv <- globalenv()
-  had_seed <- exists(".Random.seed", envir = genv, inherits = FALSE)
-  if (had_seed) old_seed <- get(".Random.seed", envir = genv, inherits = FALSE)
-  on.exit(if (had_seed) assign(".Random.seed", old_seed, envir = genv) else
-    if (exists(".Random.seed", envir = genv, inherits = FALSE)) rm(".Random.seed", envir = genv), add = TRUE)
-  set.seed(seed)
-  if (all(is.na(dist$year))) {
-    grp <- rep(1L, n); tabs <- list(dist)
-  } else {
-    yrs <- sort(unique(dist$year))
-    grp <- findInterval(years, yrs); grp[grp == 0L] <- 1L
-    tabs <- lapply(yrs, function(y) dist[which(dist$year == y), , drop = FALSE])
-  }
-  out <- numeric(n)
-  for (g in sort(unique(grp))) {
-    w <- which(grp == g); d <- tabs[[g]]
-    k <- if (nrow(d) == 1L) rep(1L, length(w)) else sample.int(nrow(d), length(w), replace = TRUE, prob = d$prob / sum(d$prob))
-    width <- d$days_max[k] - d$days_min[k] + 1
-    out[w] <- d$days_min[k] + pmin(floor(stats::runif(length(w)) * width), width - 1)
-  }
-  out
 }

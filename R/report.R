@@ -154,7 +154,8 @@
 
 .uio_settings_table <- function(settings) {
   val <- vapply(settings, function(v) {
-    if (is.null(v)) "NULL" else if (is.data.frame(v)) paste0("table (", nrow(v), " rows)") else paste(format(v), collapse = ", ")
+    if (is.null(v)) "NULL" else if (is.data.frame(v)) paste0("table by year ", min(v$year), "-", max(v$year),
+      if (isTRUE(attr(v, "extrapolate"))) " (extrapolated outside)" else "") else paste(format(v), collapse = ", ")
   }, "")
   data.table::data.table(setting = names(settings), value = unname(val))
 }

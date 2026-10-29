@@ -9,17 +9,18 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
   (`settings =`); a setting given both ways is an error.
 * The defaults are the settings of the main analysis of the comparison: `stillbirth_min_days = 154`
   (22+0 weeks, the MBRN definition), `marker_rejection_days = 119` (17 weeks, as in Nordeng et al.
-  2024), `normalize_codes = TRUE`, `induced_abortion_default_days = 49` (7+0 weeks, close to the median
-  gestational age of about 46 days in the Norwegian Registry of Pregnancy Termination), and the other
-  values of version 1.3; in addition the birth weight
+  2024), `normalize_codes = TRUE`, `induced_abortion_default_days = NULL` (the median gestational age
+  of induced abortions in the year of the outcome, from the Norwegian Registry of Pregnancy Termination,
+  see `uio_termination_days_by_year()`; one number gives a fixed length), and the other values of
+  version 1.3; in addition the birth weight
   takes part in the stillbirth rule (`stillbirth_min_weight_g = 500`, `stillbirth_weight_rule = "and"`:
   22 weeks and 500 g, the MBRN definition) when it is mapped.
 * New function `uio_v13_settings()`: the settings of the R script version 1.3.
 * New function `uio_termination_days_by_year()`: the median gestational age of induced abortions in
-  Norway per year 2015-2024 (Registry of Pregnancy Termination, FHI report for 2024, Tabell 6), for
-  `induced_abortion_default_days`. Not the default. Outcome years outside 2015-2024 are extrapolated
-  from the trend of the table (kept within its range); the run warns which years and values, with a
-  note in the summary and the report, and explains how to return to the fixed default.
+  Norway per year 2008-2024 (Registry of Pregnancy Termination, Tabell 6 of the FHI reports for 2024,
+  2018 and 2017): the default of `induced_abortion_default_days`. Outcome years outside 2008-2024 are
+  extrapolated from the trend of the table (kept within its range); the run warns which years and
+  values, with a note in the summary and the report, and explains how to use one fixed length instead.
 * `workdir` has no default any more (it was a project folder on TSD).
 
 ## Results: description of each pregnancy, summary, output folder
@@ -50,6 +51,12 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
   `birth_year` (a birth-year limit without the column was an error). `female_value` gives the code
   of women in the `gender` column.
 * `source_files` has no default in `run_uio_pa()`.
+* The columns of each source file are checked before it is read: a column whose name differs only in
+  upper/lower case is used (with a message), and a missing column is an error that names the file and
+  lists its columns (before, the column was skipped with a warning and the run failed later in `setnames`).
+* `.dsv` and `.tsv` files are read as tab-separated, as before; a file whose header has no tab is read with
+  the separator that `fread` detects. The P1380 KUHR files of the 2024 delivery are separated by `;`, so
+  they could not be read before.
 * The MBRN of current deliveries: the vital status `vital_status` (`leve_dodstatus_fodsel`: 1, 2, 3) can
   replace `death_cat` (`DODKAT`, old or 2024 coding), the gestational age in weeks `gestational_weeks`
   (`svlen`, used as weeks x 7 + 3 days) can replace `gestational_days`, and `abortion_weeks`
@@ -76,6 +83,8 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
 * Help pages describe how the algorithm works, the time conventions (the start is day 0; gestational
   age = outcome date - start), the output columns and the source files.
 * The original v1.3 script is included for the regression test (`tests/regression/reference/`).
+* `induced_abortion_default_distribution` and `random_seed` (version 1.4.0) are removed; the default of
+  `induced_abortion_default_days` is now the year table of the Registry of Pregnancy Termination.
 
 # UiOPregnancyAlgorithm 1.4.0
 

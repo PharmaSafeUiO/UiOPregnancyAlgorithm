@@ -32,7 +32,8 @@
 #'     `marker_rejection_days`; (c) if markers were found but
 #'     all were rejected, `marker_rejection_days`; (d) otherwise the outcome-specific default
 #'     (`induced_abortion_default_days`, `miscarriage_default_days`, `molar_default_days`,
-#'     `ectopic_default_days`, or a draw from `induced_abortion_default_distribution`). A start
+#'     `ectopic_default_days`; for induced abortions by default the median of the year of the outcome
+#'     in the Registry of Pregnancy Termination, see [uio_termination_days_by_year()]). A start
 #'     before the woman's previous outcome is moved to that outcome date
 #'     (`truncated_at_previous_outcome`).
 #' }
@@ -40,7 +41,7 @@
 #' @section Time conventions:
 #' The start date is **day 0**; the gestational age at the outcome is
 #' `GA_event_days_final = date_outcome - pr_start_final` (days) and
-#' `GA_event_week_final = floor(GA_event_days_final / 7)` (completed weeks). A default of 49 days
+#' `GA_event_week_final = floor(GA_event_days_final / 7)` (completed weeks). A length of 49 days
 #' therefore puts the outcome at 7+0 weeks, which the Norwegian registries count as week 8
 #' (ordinal weeks: week `n` = days `7(n-1)` to `7n-1`). All windows are in whole days; "within
 #' `d` days before the outcome" includes the outcome date and the day `d` days before it.
@@ -84,15 +85,12 @@
 #'   Default `70`.
 #' @param same_event_days Records less than this many days apart are the same event. Default `56`.
 #' @param induced_abortion_default_days,miscarriage_default_days,molar_default_days,ectopic_default_days
-#'   Pregnancy length in days when nothing else dates the pregnancy. Defaults `49`, `70`, `77`,
-#'   `56`. One number, or a data frame with columns `year` and `days`.
+#'   Pregnancy length in days when nothing else dates the pregnancy. Defaults `NULL` (induced
+#'   abortions: the median of the outcome year, [uio_termination_days_by_year()]), `70`, `77`, `56`.
+#'   One number, or a data frame with columns `year` and `days`.
 #' @param o35_induced_days Length of an induced abortion with an O35 code. Default `80`.
 #' @param o35_window_days The O35 code must be recorded from the abortion date up to this many
 #'   days after it. Default `27`.
-#' @param induced_abortion_default_distribution `NULL` (default) or a data frame (`days_min`,
-#'   `days_max`, `prob`, optional `year`) from which the length of undated induced abortions is
-#'   drawn.
-#' @param random_seed Seed for those draws. Default `1`.
 #' @param normalize_codes Normalise diagnosis codes (upper case, letters and digits only) before
 #'   matching. Default `TRUE`.
 #' @param settings `NULL` or a named list of settings (names as the arguments above).
@@ -138,9 +136,8 @@
 #'     5 NPR+KUHR, 6 NPR, 7 KUHR.}
 #'   \item{`TOP_source`}{Sources of an induced abortion: 2 MBRN+NPR, 4 MBRN, 6 NPR.}
 #'   \item{`dating_method`}{`"MBRN (recorded GA)"`, `"pregnancy marker"`,
-#'     `"fixed 80 d (TOP with O35)"`, `"fixed 119 d (marker >= 17 wk rejected)"`,
-#'     `"fixed outcome-specific default"` or
-#'     `"fixed outcome-specific default (drawn from distribution)"` (the numbers follow the settings).}
+#'     `"fixed 80 d (TOP with O35)"`, `"fixed 119 d (marker >= 17 wk rejected)"` or
+#'     `"fixed outcome-specific default"` (the numbers follow the settings).}
 #'   \item{`truncated_at_previous_outcome`}{`TRUE` if the start was moved to the woman's previous
 #'     outcome date.}
 #' }
@@ -161,6 +158,8 @@
 #' # sensitivity analyses
 #' res_ga <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
 #'                      stillbirth_min_weight_g = NULL)    # stillbirth by gestational age only
+#' res_49 <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
+#'                      induced_abortion_default_days = 49) # one fixed length for undated abortions
 #'
 #' # version 1.3
 #' res13 <- run_uio_pa(workdir = "N:/durable/work/uio", source_files = src,
@@ -179,14 +178,12 @@ run_uio_pa <- function(workdir,
                        marker_rejection_days = 119,
                        marker_lookback_days = 70,
                        same_event_days = 56,
-                       induced_abortion_default_days = 49,
+                       induced_abortion_default_days = NULL,
                        miscarriage_default_days = 70,
                        molar_default_days = 77,
                        ectopic_default_days = 56,
                        o35_induced_days = 80,
                        o35_window_days = 27,
-                       induced_abortion_default_distribution = NULL,
-                       random_seed = 1,
                        normalize_codes = TRUE,
                        settings = NULL,
                        output_dir = file.path(workdir, "output"),

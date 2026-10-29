@@ -23,7 +23,7 @@ utils::globalVariables(c(
   ".", "ant_dager", "APGAR5", "birth_year", "check_ga_quad", "check_ga_triplet", "check_ga_twin",
   "count_ectopic", "count_KUHR_sp", "count_molar", "count_NPR_sp", "count_NPR_top", "count_sp_N",
   "count_top_N", "DAGER_FDATO", "DAGER_FDATO_MF", "DAGER_FDATO1", "DAGER_FDATO2", "DAGER_FDATO3",
-  "DAGER_FDATO4", "date_outcome", "dating_method", "days_before", "default_drawn", "diagno", "diagnose",
+  "DAGER_FDATO4", "date_outcome", "dating_method", "days_before", "diagno", "diagnose",
   "diagnosekodeverk", "diffdato", "DODKAT", "earlier_diagnosis", "episode_no", "filter", "flag_over12weeks",
   "fodselsar", "GA_days_event", "GA_event_days_final", "GA_event_days_imput", "GA_event_days_MBRN",
   "GA_event_week_final", "GA_event_week_imput", "GA_event_week_MBRN", "GA_weeks_event", "gap_previous",
