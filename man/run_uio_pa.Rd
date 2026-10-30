@@ -34,8 +34,6 @@ run_uio_pa(
   missing_ga_impute = TRUE,
   missing_ga_confirm_days = c(before = 28, after = 7),
   missing_ga_livebirth_days = 280,
-  missing_ga_min_gap_days = 28,
-  missing_ga_livebirth_min_days = 154,
   nonlive_codes = uio_nonlive_codes()
 )
 }
@@ -111,32 +109,25 @@ date. Default \code{c(before = 55, after = 55)} (\code{same_event_days - 1}: the
 \code{missing_ga_reject_days} days or more is rejected. \code{NULL} (default): the run's \code{marker_lookback_days}
 and \code{marker_rejection_days} (70 and 119), as in the algorithm.}
 
-\item{missing_ga_impute}{[experimental] If \code{TRUE} (default), MBRN single births with a fetal death
-(\code{DODKAT} 7-9) and without gestational age are kept: each is decided as a termination (an NPR/KUHR O04 code or a
-KUHR W83 code around the birth date, whatever the weight), a stillbirth (weight at least \code{stillbirth_min_weight_g}; or weight missing and
-no NPR/KUHR miscarriage code around the birth date) or a late spontaneous abortion (weight below the limit; or weight
-missing and such a code), and gets the median gestational age of the MBRN records of that kind (terminations:
-DODKAT 10) with a recorded gestational age. MBRN single live
-births without gestational age are kept with \code{missing_ga_livebirth_days}. \code{dating_method} then says
-"MBRN (imputed GA: ...)" and \code{ga_imputed} is \code{TRUE}. \code{FALSE} drops them, as the main package.}
+\item{missing_ga_impute}{[experimental] If \code{TRUE} (default), MBRN single births without gestational age are
+kept with an imputed gestational age. The MBRN category decides: an induced abortion (\code{DODKAT} 10) is a termination
+(the median gestational age of the MBRN terminations), a live birth is a live birth (\code{missing_ga_livebirth_days}),
+and a fetal death (\code{DODKAT} 7-9) is a stillbirth (235 days) or a late spontaneous abortion (the
+median gestational age of the MBRN late spontaneous abortions): stillbirth if the weight is at least
+\code{stillbirth_min_weight_g}, late spontaneous abortion if it is below; weight missing: late spontaneous abortion if
+NPR/KUHR has a miscarriage code around the birth date (\code{missing_ga_confirm_days}), otherwise stillbirth. NPR/KUHR
+codes never make a termination. A record is not imputed (dropped, as in the main package) when its imputed start
+(birth date minus the imputed gestational age) is less than 56 days after the woman's previous MBRN record, or for a
+live birth when the imputed gestational age is below 154 days. \code{dating_method} then says "MBRN (imputed GA: ...)"
+and \code{ga_imputed} is \code{TRUE}. \code{FALSE} drops them, as the main package.}
 
 \item{missing_ga_confirm_days}{[experimental] \code{c(before =, after =)}: the window around the birth date for the
-NPR/KUHR codes of a fetal death without gestational age: ICD-10 O04 or ICPC-2 W83 (termination), and ICD-10 O02, O03
-or ICPC-2 W82 (late spontaneous abortion when the weight is missing). Default \code{c(before = 28, after = 7)}. Records in
-the \code{before} days are this pregnancy's own codes, not a previous outcome (\code{missing_ga_min_gap_days}).}
+NPR/KUHR miscarriage codes (ICD-10 O02, O03; ICPC-2 W82) of a fetal death without gestational age and weight.
+Default \code{c(before = 28, after = 7)}.}
 
 \item{missing_ga_livebirth_days}{[experimental] Gestational age (days) given to MBRN single live births without
 gestational age when \code{missing_ga_impute = TRUE} (they are then kept). Default \code{280} (40+0 weeks, the median of live
 births).}
-
-\item{missing_ga_min_gap_days}{[experimental, may be dropped] The start of an imputed pregnancy is not earlier than
-this many days after the woman's previous outcome (an MBRN birth, or an NPR/KUHR outcome code of the algorithm, dated
-as the algorithm dates repeated records, more than \code{missing_ga_confirm_days["before"]} days before the birth date);
-otherwise its gestational age is shortened. Default \code{28}. The rest of the algorithm only moves a start to the previous
-outcome date.}
-
-\item{missing_ga_livebirth_min_days}{[experimental, may be dropped] A live birth whose gestational age is shortened
-below this (by \code{missing_ga_min_gap_days}) is not imputed (dropped, as in the main package). Default \code{154} (22+0 weeks).}
 
 \item{nonlive_codes}{[experimental] The non-live outcome codes of the report, see
 \code{\link[=uio_nonlive_codes]{uio_nonlive_codes()}}.}

@@ -114,28 +114,23 @@
 #'   `missing_ga_marker_days` days before the birth date up to it, and a marker that implies
 #'   `missing_ga_reject_days` days or more is rejected. `NULL` (default): the run's `marker_lookback_days`
 #'   and `marker_rejection_days` (70 and 119), as in the algorithm.
-#' @param missing_ga_impute \[experimental\] If `TRUE` (default), MBRN single births with a fetal death
-#'   (`DODKAT` 7-9) and without gestational age are kept: each is decided as a termination (an NPR/KUHR O04 code or a
-#'   KUHR W83 code around the birth date, whatever the weight), a stillbirth (weight at least `stillbirth_min_weight_g`; or weight missing and
-#'   no NPR/KUHR miscarriage code around the birth date) or a late spontaneous abortion (weight below the limit; or weight
-#'   missing and such a code), and gets the median gestational age of the MBRN records of that kind (terminations:
-#'   DODKAT 10) with a recorded gestational age. MBRN single live
-#'   births without gestational age are kept with `missing_ga_livebirth_days`. `dating_method` then says
-#'   "MBRN (imputed GA: ...)" and `ga_imputed` is `TRUE`. `FALSE` drops them, as the main package.
+#' @param missing_ga_impute \[experimental\] If `TRUE` (default), MBRN single births without gestational age are
+#'   kept with an imputed gestational age. The MBRN category decides: an induced abortion (`DODKAT` 10) is a termination
+#'   (the median gestational age of the MBRN terminations), a live birth is a live birth (`missing_ga_livebirth_days`),
+#'   and a fetal death (`DODKAT` 7-9) is a stillbirth (235 days) or a late spontaneous abortion (the
+#'   median gestational age of the MBRN late spontaneous abortions): stillbirth if the weight is at least
+#'   `stillbirth_min_weight_g`, late spontaneous abortion if it is below; weight missing: late spontaneous abortion if
+#'   NPR/KUHR has a miscarriage code around the birth date (`missing_ga_confirm_days`), otherwise stillbirth. NPR/KUHR
+#'   codes never make a termination. A record is not imputed (dropped, as in the main package) when its imputed start
+#'   (birth date minus the imputed gestational age) is less than 56 days after the woman's previous MBRN record, or for a
+#'   live birth when the imputed gestational age is below 154 days. `dating_method` then says "MBRN (imputed GA: ...)"
+#'   and `ga_imputed` is `TRUE`. `FALSE` drops them, as the main package.
 #' @param missing_ga_confirm_days \[experimental\] `c(before =, after =)`: the window around the birth date for the
-#'   NPR/KUHR codes of a fetal death without gestational age: ICD-10 O04 or ICPC-2 W83 (termination), and ICD-10 O02, O03
-#'   or ICPC-2 W82 (late spontaneous abortion when the weight is missing). Default `c(before = 28, after = 7)`. Records in
-#'   the `before` days are this pregnancy's own codes, not a previous outcome (`missing_ga_min_gap_days`).
+#'   NPR/KUHR miscarriage codes (ICD-10 O02, O03; ICPC-2 W82) of a fetal death without gestational age and weight.
+#'   Default `c(before = 28, after = 7)`.
 #' @param missing_ga_livebirth_days \[experimental\] Gestational age (days) given to MBRN single live births without
 #'   gestational age when `missing_ga_impute = TRUE` (they are then kept). Default `280` (40+0 weeks, the median of live
 #'   births).
-#' @param missing_ga_min_gap_days \[experimental, may be dropped\] The start of an imputed pregnancy is not earlier than
-#'   this many days after the woman's previous outcome (an MBRN birth, or an NPR/KUHR outcome code of the algorithm, dated
-#'   as the algorithm dates repeated records, more than `missing_ga_confirm_days["before"]` days before the birth date);
-#'   otherwise its gestational age is shortened. Default `28`. The rest of the algorithm only moves a start to the previous
-#'   outcome date.
-#' @param missing_ga_livebirth_min_days \[experimental, may be dropped\] A live birth whose gestational age is shortened
-#'   below this (by `missing_ga_min_gap_days`) is not imputed (dropped, as in the main package). Default `154` (22+0 weeks).
 #' @param nonlive_codes \[experimental\] The non-live outcome codes of the report, see
 #'   [uio_nonlive_codes()].
 #'
@@ -236,8 +231,6 @@ run_uio_pa <- function(workdir,
                        missing_ga_impute = TRUE,
                        missing_ga_confirm_days = c(before = 28, after = 7),
                        missing_ga_livebirth_days = 280,
-                       missing_ga_min_gap_days = 28,
-                       missing_ga_livebirth_min_days = 154,
                        nonlive_codes = uio_nonlive_codes()) {
   if (missing(workdir) || !is.character(workdir) || length(workdir) != 1L || !dir.exists(workdir))
     stop("`workdir` must be an existing folder.", call. = FALSE)
@@ -262,9 +255,7 @@ run_uio_pa <- function(workdir,
   res <- detect_pregnancy_episodes(source_files, hospital_codes, primary_care_codes,
                                    years_range = years_range, settings = settings, nonlive_codes = nonlive_codes,
                                    missing_ga_impute = missing_ga_impute, missing_ga_confirm_days = missing_ga_confirm_days,
-                                   missing_ga_livebirth_days = missing_ga_livebirth_days,
-                                   missing_ga_min_gap_days = missing_ga_min_gap_days,
-                                   missing_ga_livebirth_min_days = missing_ga_livebirth_min_days)
+                                   missing_ga_livebirth_days = missing_ga_livebirth_days)
   cap <- attr(res, "uio_capture")
   notes <- character(0)
   if (!is.null(settings$stillbirth_min_weight_g) && !isTRUE(cap$weight_used))
@@ -274,22 +265,17 @@ run_uio_pa <- function(workdir,
   imp <- if (!is.null(imp_all) && "imputed" %in% names(imp_all)) imp_all[imputed == TRUE] else imp_all
   if (!is.null(imp) && nrow(imp)) {
     mkn <- function(x) .uio_mask(x, max(mask_below, 1))
-    top <- imp[kind == "termination"]
     notes <- c(notes, paste0("[experimental] MBRN single births without gestational age kept with an imputed gestational age: ",
-                             mkn(nrow(top)), " terminations (NPR O04 only ", mkn(sum(top$o04_npr & !top$o04_kuhr & !top$w83)),
-                             ", KUHR W83 only ", mkn(sum(top$w83 & !top$o04_npr & !top$o04_kuhr)), ", KUHR O04 only ",
-                             mkn(sum(top$o04_kuhr & !top$o04_npr & !top$w83)), ", more than one of these ",
-                             mkn(sum((top$o04_npr + top$o04_kuhr + top$w83) > 1)), "; ", cap$missing_ga$medians[["termination"]],
+                             mkn(sum(imp$kind == "termination")), " terminations (DODKAT 10; ", cap$missing_ga$medians[["termination"]],
                              " days, the median of the MBRN terminations with a recorded gestational age), ",
-                             mkn(sum(imp$kind == "stillbirth")), " stillbirths (", cap$missing_ga$medians[["stillbirth"]],
-                             " days, the median of the MBRN stillbirths with a recorded gestational age) and ",
+                             mkn(sum(imp$kind == "stillbirth")), " stillbirths (", cap$missing_ga$medians[["stillbirth"]], " days) and ",
                              mkn(sum(imp$kind == "late_spontaneous_abortion")), " late spontaneous abortions (", cap$missing_ga$medians[["late_spontaneous_abortion"]],
                              " days, the median of the MBRN late spontaneous abortions with a recorded gestational age)",
                              if (any(imp$kind == "live_birth")) paste0("; MBRN single live births without gestational age: ",
                                                                        mkn(sum(imp$kind == "live_birth")), " (", cap$missing_ga$medians[["live_birth"]], " days)") else "", ". ",
-                             "Start not earlier than ", missing_ga_min_gap_days, " days after the woman's previous outcome: ", mkn(sum(imp$capped)),
-                             " starts moved; ", mkn(sum(!imp_all$imputed)), " records not imputed because the gestational age left was too short (live births below ",
-                             missing_ga_livebirth_min_days, " days)."))
+                             "Not imputed: ", mkn(sum(imp_all$too_close)), " records whose start would be less than 56",
+                             " days after the woman's previous MBRN record, ", mkn(sum(!imp_all$imputed & !imp_all$too_close)),
+                             " live births below 154 days."))
   }
   out <- .uio_describe(res, cap, settings, hospital_codes, primary_care_codes)
   # pregnancies without an outcome (kept, as in v1.3): MBRN multiple births whose combination of child outcomes is not

@@ -4,7 +4,7 @@
 ## The synthetic data of the regression test (tests/regression/make_synthetic_data.R) plus these women,
 ## all MBRN births without gestational age (SVLEN_DG missing) unless stated:
 ##   20  fetal death (DODKAT 7), 400 g, 2016-05-10; NPR O021 2 days before, KUHR W82 20 days before
-##   21  fetal death (DODKAT 8), 800 g, 2017-06-01; NPR O049 the same day, NPR O359 3 days after (O35 rule)
+##   21  fetal death (DODKAT 8), 800 g, 2017-06-01; NPR O049 the same day, NPR O359 3 days after (O35 rule): a stillbirth
 ##   22  fetal death (DODKAT 9), weight missing, 2018-03-03; nothing in NPR or KUHR
 ##   23  fetal death (DODKAT 7), 350 g, 2019-02-02; KUHR W82 3 days before; NPR O039 100 days before (outside);
 ##       NPR Z321 154 days before (outside the marker window)
@@ -13,15 +13,21 @@
 ##   26  DODKAT 13 with Apgar 0 (unknown), 2014-05-05; nothing
 ##   27  fetal death (DODKAT 7), 600 g, 2020-10-10; NPR Z321 30 days before (start: 30 + 64 = 94 days), NPR O039 5 days after
 ##   28  twins 2021-01-01: live birth with GA 250 days and a fetal death (DODKAT 7, 900 g) without GA
-##   29  fetal death (DODKAT 7), weight 0 (= missing), 2022-06-06; NPR O021 the same day, KUHR W83 10 days before
+##   29  fetal death (DODKAT 7), weight 0 (= missing), 2022-06-06; NPR O021 the same day, KUHR W83 10 days before: a late
+##       spontaneous abortion (O021; W83 not used)
 ##   30  fetal death (DODKAT 7), 2024-05-05: outside years_range c(2008, 2023), not counted
 ##   31  fetal death (DODKAT 7), 700 g, 2019-09-09; NPR Z321 60 days before (implies 60 + 64 = 124 days: rejected)
-##   32  live birth (DODKAT 0), 2016-01-15; NPR O021 120 days before (previous outcome: 92 days left, below 154: not imputed)
-##   33  fetal death (DODKAT 9), weight missing, 2017-03-03; NPR O039 100 days before and again 73 days before (one event,
-##       dated by its first record: start 2016-12-21, 72 days; a stillbirth below 154 days becomes a late spontaneous abortion)
+##   32  live birth (DODKAT 0), 2016-01-15; NPR O021 120 days before (not an MBRN record: inside the imputed 280 days)
+##   33  fetal death (DODKAT 9), weight missing, 2017-03-03; NPR O039 100 days before and again 73 days before (outside the
+##       -28/+7 window: a stillbirth, 235 days)
 ##   34  live birth (DODKAT 0), 2018-06-01; an earlier MBRN live birth WITH GA (270 days) on 2017-12-01, and NPR O021 19 days
-##       after it (part of that birth, not a previous outcome): start 2017-12-29, 154 days, imputed
-## W23's NPR O039 100 days before is its previous outcome: start 28 days after it (72 days). W29's KUHR W83 makes it a termination.
+##       after it: the imputed start (280 days) is before that birth, less than 56 days after it: not imputed
+##   36  induced abortion (DODKAT 10), 250 g, 2016-07-07; nothing: a termination (median of the MBRN terminations)
+##   35  fetal death (DODKAT 7), 300 g, 2025-06-01 (after years_range: not in the report); an MBRN live birth WITH GA on
+##       2024-12-07: the imputed start (120 days) is exactly 56 days after it: imputed
+##   37  fetal death (DODKAT 7), 300 g, 2025-08-08; an MBRN live birth WITH GA on 2025-02-14: 55 days: not imputed
+## Only the previous MBRN record limits an imputed start (56 days): W23's NPR O039 100 days before is inside its imputed
+## pregnancy.
 args <- commandArgs(TRUE)
 get_arg <- function(k, default = NULL) { a <- grep(paste0("^--", k, "="), args, value = TRUE); if (length(a)) sub(paste0("^--", k, "="), "", a[1]) else default }
 lib <- get_arg("lib", .libPaths()[1])
@@ -41,17 +47,17 @@ off <- function(d) as.integer(as.Date(d) - ref_date)
 f_mfr <- list.files(file.path(raw_dir, "MFR"), full.names = TRUE)
 mfr <- fread(f_mfr)
 add <- data.table(
-  MOR_PasientLopeNr_PDB2774 = c(20L, 21L, 22L, 23L, 24L, 25L, 26L, 27L, 28L, 28L, 29L, 30L, 31L, 32L, 33L, 34L, 34L),
-  BARN_LOPENR = 201:217, MORS_ALDER = 30L,
+  MOR_PasientLopeNr_PDB2774 = c(20L, 21L, 22L, 23L, 24L, 25L, 26L, 27L, 28L, 28L, 29L, 30L, 31L, 32L, 33L, 34L, 34L, 36L, 35L, 35L, 37L, 37L),
+  BARN_LOPENR = 201:222, MORS_ALDER = 30L,
   FDATO_DIFF = off(c("2016-05-10", "2017-06-01", "2018-03-03", "2019-02-02", "2015-09-09", "2014-04-04", "2014-05-05",
                      "2020-10-10", "2021-01-01", "2021-01-01", "2022-06-06", "2024-05-05", "2019-09-09", "2016-01-15", "2017-03-03",
-                     "2017-12-01", "2018-06-01")),
-  PLUREK = c(1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L),
-  SVLEN_DG = c(NA, NA, NA, NA, NA, NA, NA, NA, 250L, NA, NA, NA, NA, NA, NA, 270L, NA),
-  DODKAT = c(7L, 8L, 9L, 7L, 0L, 13L, 13L, 7L, 0L, 7L, 7L, 7L, 7L, 0L, 9L, 0L, 0L),
-  APGAR5 = c(0L, 0L, 0L, 0L, 9L, 8L, 0L, 0L, 8L, 0L, 0L, 0L, 0L, 9L, 0L, 9L, 9L),
+                     "2017-12-01", "2018-06-01", "2016-07-07", "2024-12-07", "2025-06-01", "2025-02-14", "2025-08-08")),
+  PLUREK = c(1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 2L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L),
+  SVLEN_DG = c(NA, NA, NA, NA, NA, NA, NA, NA, 250L, NA, NA, NA, NA, NA, NA, 270L, NA, NA, 270L, NA, 270L, NA),
+  DODKAT = c(7L, 8L, 9L, 7L, 0L, 13L, 13L, 7L, 0L, 7L, 7L, 7L, 7L, 0L, 9L, 0L, 0L, 10L, 0L, 7L, 0L, 7L),
+  APGAR5 = c(0L, 0L, 0L, 0L, 9L, 8L, 0L, 0L, 8L, 0L, 0L, 0L, 0L, 9L, 0L, 9L, 9L, 0L, 9L, 0L, 9L, 0L),
   MOR_FAAR = 1986L,
-  VEKT = c(400L, 800L, NA, 350L, 3000L, 3200L, 3100L, 600L, 2500L, 900L, 0L, 700L, 700L, 3300L, NA, 3400L, 3500L))
+  VEKT = c(400L, 800L, NA, 350L, 3000L, 3200L, 3100L, 600L, 2500L, 900L, 0L, 700L, 700L, 3300L, NA, 3400L, 3500L, 250L, 3300L, 300L, 3300L, 300L))
 fwrite(rbind(mfr, add), f_mfr)
 # NPR (SOM file; the linkage key is column 22)
 f_som <- list.files(file.path(raw_dir, "NPR"), pattern = "_SOMdata", full.names = TRUE)
@@ -126,48 +132,56 @@ check("B: the marker that set the start: NPR Z321 (pregnancy confirmed, 64 days)
 check("C: captured, fetal deaths: outcome and start 1, outcome only 4, start only 0, neither 4; live births: outcome only 1, neither 3",
       cell(T$captured, FD, "Outcome and start") == 1 && cell(T$captured, FD, "Outcome only") == 4 && cell(T$captured, FD, "Start only") == 0 &&
         cell(T$captured, FD, "Neither") == 4 && cell(T$captured, LB, "Outcome only") == 1 && cell(T$captured, LB, "Neither") == 3)
-check("D: the algorithm now keeps every single fetal death without GA as an MBRN pregnancy: late spontaneous abortion 3 (W20, W23, W33), termination 2 (W21 O04, W29 W83), stillbirth 3 (imputed GA); the twin W28 is the MBRN live birth",
+check("D: the algorithm now keeps every single fetal death without GA as an MBRN pregnancy: late spontaneous abortion 3 (W20, W23, W29), stillbirth 5 (W21, W22, W27, W31, W33), no termination; the twin W28 is the MBRN live birth",
       key(T$C_algorithm[T$C_algorithm$group == FD, ], c("decided_by", "outcome", "n", "MBRN_GA", "MBRN_GA_imputed")) ==
-        "MBRN/Live birth/1/1/0; MBRN/Late spontaneous abortion/3/0/3; MBRN/Termination of pregnancy/2/0/2; MBRN/Stillbirth/3/0/3")
+        "MBRN/Live birth/1/1/0; MBRN/Late spontaneous abortion/3/0/3; MBRN/Stillbirth/5/0/5")
 
 ## [experimental] imputation of the gestational age of MBRN single fetal deaths without GA
 P <- as.data.table(res0)
-fd_dates <- data.table(ID = c(20L, 21L, 22L, 23L, 27L, 29L, 31L, 33L),
-                       d = as.Date(c("2016-05-10", "2017-06-01", "2018-03-03", "2019-02-02", "2020-10-10", "2022-06-06", "2019-09-09", "2017-03-03")),
-                       kind = c("Late spontaneous abortion", "Termination of pregnancy", "Stillbirth", "Late spontaneous abortion", "Stillbirth",
-                                "Termination of pregnancy", "Stillbirth", "Late spontaneous abortion"),
-                       ga = c(120, 119, 154, 72, 154, 119, 154, 72),
-                       dm = c("late spontaneous abortions", "terminations", "stillbirths", "late spontaneous abortions, start 28 d after the previous outcome",
-                              "stillbirths", "terminations", "stillbirths", "stillbirths, start 28 d after the previous outcome"))
+fd_dates <- data.table(ID = c(20L, 21L, 22L, 23L, 27L, 29L, 31L, 33L, 36L),
+                       d = as.Date(c("2016-05-10", "2017-06-01", "2018-03-03", "2019-02-02", "2020-10-10", "2022-06-06", "2019-09-09", "2017-03-03",
+                                     "2016-07-07")),
+                       kind = c("Late spontaneous abortion", "Stillbirth", "Stillbirth", "Late spontaneous abortion", "Stillbirth",
+                                "Late spontaneous abortion", "Stillbirth", "Stillbirth", "Termination of pregnancy"),
+                       ga = c(120, 235, 235, 120, 235, 120, 235, 235, 119),
+                       dm = c("median of late spontaneous abortions", "fixed for stillbirths", "fixed for stillbirths", "median of late spontaneous abortions",
+                              "fixed for stillbirths", "median of late spontaneous abortions", "fixed for stillbirths", "fixed for stillbirths",
+                              "median of terminations"))
 got <- P[fd_dates, on = .(ID, date_outcome = d), nomatch = NA]
-check("imputation: W20 (400 g), W23 (350 g) late spontaneous abortions; W21 (800 g, NPR O049 the same day) and W29 (weight 0 = missing, KUHR W83 10 days before) terminations; W22 (no weight, no code), W27 (600 g), W31 (700 g) stillbirths; W33 (no weight, no code in the window) a stillbirth by the rule, a late spontaneous abortion after its start was moved (72 days)",
+check("imputation: W20 (400 g), W23 (350 g), W29 (weight missing, NPR O021 the same day) late spontaneous abortions; W21 (800 g; its NPR O049 not used), W22 (no weight, no code), W27 (600 g), W31 (700 g), W33 (no weight, no code in the window) stillbirths; W36 (DODKAT 10) a termination",
       identical(got$outcome_lable_new, fd_dates$kind) && all(got$outcome_source == "MBRN"))
-check("imputation: GA = data median (late spontaneous abortions 120 days, stillbirths 154 days: the median 150 of the synthetic stillbirths raised to 154, terminations 119 days: no MBRN termination with GA, fallback), but W23 and W33 72 days (start 28 days after the previous outcome); dating_method and ga_imputed say so",
+check("imputation: GA = late spontaneous abortions 120 days (data median), stillbirths 235 days (fixed), terminations 119 days (no MBRN termination with GA: fallback), never shortened; dating_method and ga_imputed say so",
       identical(as.numeric(got$GA_event_days_final), fd_dates$ga) && all(got$ga_imputed) &&
-        identical(got$dating_method, paste0("MBRN (imputed GA: median of ", fd_dates$dm, ")")) &&
+        identical(got$dating_method, paste0("MBRN (imputed GA: ", fd_dates$dm, ")")) &&
         all(got$dating_class == "fixed") && all(got$dating_source == "MBRN median"))
 IM <- attr(res0, "imputed_missing_ga")
-check("W83: W29 is a termination by its KUHR W83 alone (no O04); W21 by NPR O04",
+check("termination codes are listed but not used: W21 (NPR O049) a stillbirth, W29 (KUHR W83) a late spontaneous abortion by its NPR O021",
       { a <- IM[ID == "29"]; b <- IM[ID == "21"]
-        a$kind == "termination" && a$w83 && !a$o04_npr && !a$o04_kuhr && b$kind == "termination" && b$o04_npr && !b$w83 })
-check("previous outcome: W23's NPR O039 100 days before; W33's event of two O039 records dated by the first (100 days before); W34's earlier MBRN birth (its NPR O021 19 days after that birth belongs to it); W24's O034 3 days before is its own code (start not moved)",
-      IM[ID == "23", prev_outcome] == as.integer(as.Date("2018-10-25")) && IM[ID == "33", prev_outcome] == as.integer(as.Date("2016-11-23")) &&
-        IM[ID == "34", prev_outcome] == as.integer(as.Date("2017-12-01")) && is.na(IM[ID == "24", prev_outcome]) && !IM[ID == "24", capped])
-check("live births: W34 imputed with 154 days (start 28 days after its previous birth, exactly the limit); W32 not imputed (92 days left): no pregnancy at its birth date, its NPR O021 is a spontaneous abortion",
-      { w34 <- P[ID == 34L & date_outcome == as.Date("2018-06-01")]
-        nrow(w34) == 1L && w34$GA_event_days_final == 154 && w34$ga_imputed && !IM[ID == "32", imputed] && IM[ID == "32", ga] == 92 &&
-          nrow(P[ID == 32L & date_outcome == as.Date("2016-01-15")]) == 0L &&
-          P[ID == 32L & date_outcome == as.Date("2015-09-17"), outcome_lable_new] == "Spontaneous abortion" })
-check("the earlier outcomes are kept as their own pregnancies once the start is moved: W23's O039 (2018-10-25) and W33's O039 (2016-11-23) are spontaneous abortions",
-      P[ID == 23L & date_outcome == as.Date("2018-10-25"), outcome_lable_new] == "Spontaneous abortion" &&
-        P[ID == 33L & date_outcome == as.Date("2016-11-23"), outcome_lable_new] == "Spontaneous abortion")
-check("missing_ga_min_gap_days = 0: W23's start is the previous outcome date (100 days)",
-      { r <- as.data.table(run_uio_pa(workdir = wd, source_files = src, years_range = c(2008, 2023), output_dir = NULL, verbose = FALSE,
-                                      missing_ga_report = FALSE, missing_ga_min_gap_days = 0))
-        r[ID == 23L & date_outcome == as.Date("2019-02-02"), GA_event_days_final] == 100 })
-check("O04 rule: W21's termination is the MBRN pregnancy (TOP_source MBRN+NPR, outcome_final 3); codes_mbrn keeps the registered DODKAT 8",
-      { w <- P[ID == 21L & date_outcome == as.Date("2017-06-01")]
-        nrow(w) == 1L && w$outcome_final == 3L && w$TOP_source %in% 2 && grepl("DODKAT 8", w$codes_mbrn, fixed = TRUE) })
+        a$kind == "late_spontaneous_abortion" && a$termination_code && a$confirmed && b$kind == "stillbirth" && b$termination_code })
+check("previous MBRN record: W34's earlier birth (2017-12-01); none for W23 (its NPR O039 does not count), W24, W32",
+      IM[ID == "34", prev_mbrn] == as.integer(as.Date("2017-12-01")) && all(is.na(IM[ID %in% c("23", "24", "32"), prev_mbrn])) &&
+        IM[ID == "34", too_close] && !any(IM[!ID %in% c("34", "37"), too_close]))
+check("live births: W34 not imputed (280 days would start before its previous MBRN birth): no pregnancy at its birth date; W32 imputed with 280 days",
+      { w32 <- P[ID == 32L & date_outcome == as.Date("2016-01-15")]
+        !IM[ID == "34", imputed] && nrow(P[ID == 34L & date_outcome == as.Date("2018-06-01")]) == 0L &&
+          nrow(w32) == 1L && w32$GA_event_days_final == 280 && w32$ga_imputed })
+check("NPR codes inside an imputed pregnancy belong to it: no pregnancy at W23's O039 (2018-10-25), W32's O021 (2015-09-17) or W33's O039 (2016-11-23)",
+      nrow(P[(ID == 23L & date_outcome == as.Date("2018-10-25")) | (ID == 32L & date_outcome == as.Date("2015-09-17")) |
+               (ID == 33L & date_outcome == as.Date("2016-11-23"))]) == 0L)
+check("56 days at the limit: W35's start (120 days) is exactly 56 days after its previous MBRN birth: imputed; W37's 55 days: not imputed, no pregnancy at its birth date",
+      nrow(P[ID == 35L & date_outcome == as.Date("2025-06-01") & GA_event_days_final == 120 & ga_imputed]) == 1L &&
+        IM[ID == "35", prev_mbrn] == as.integer(as.Date("2024-12-07")) && !IM[ID == "35", too_close] &&
+        IM[ID == "37", too_close] && !IM[ID == "37", imputed] && nrow(P[ID == 37L & date_outcome == as.Date("2025-08-08")]) == 0L)
+check("live births given 150 days (missing_ga_livebirth_days, below 154) are not imputed: no pregnancy at W24's and W25's birth dates",
+      { r <- run_uio_pa(workdir = wd, source_files = src, years_range = c(2008, 2023), output_dir = NULL, verbose = FALSE,
+                        missing_ga_report = FALSE, missing_ga_livebirth_days = 150)
+        im <- attr(r, "imputed_missing_ga"); r <- as.data.table(r)
+        !any(im[kind == "live_birth", imputed]) && !any(im[kind == "live_birth", too_close & ID %in% c("24", "25")]) &&
+          nrow(r[(ID == 24L & date_outcome == as.Date("2015-09-09")) | (ID == 25L & date_outcome == as.Date("2014-04-04"))]) == 0L })
+check("W21 is an MBRN stillbirth (outcome_final 4), one pregnancy; codes_mbrn keeps DODKAT 8; W36 an MBRN termination (outcome_final 3, TOP_source MBRN)",
+      { w <- P[ID == 21L & date_outcome == as.Date("2017-06-01")]; t <- P[ID == 36L]
+        nrow(w) == 1L && w$outcome_final == 4L && grepl("DODKAT 8", w$codes_mbrn, fixed = TRUE) &&
+          nrow(t) == 1L && t$outcome_final == 3L && t$TOP_source %in% 4 })
 check("no double counting: one pregnancy of the algorithm within 55 days of each of these birth dates (the NPR/KUHR codes around them belong to the MBRN pregnancy)",
       all(U[ID %in% as.character(fd_dates$ID) & group == "SB", n_candidates] == 1L))
 check("the twin W28 (fetal death without GA) is not imputed; the pregnancy outside years_range (W30, 2024) is kept by the algorithm as MBRN births after the last year are",

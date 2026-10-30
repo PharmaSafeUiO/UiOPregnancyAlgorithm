@@ -3,16 +3,17 @@
 MBRN records without gestational age (experimental; the additions are marked "[experimental]" in the code).
 
 * MBRN single births without gestational age are kept (`missing_ga_impute = TRUE`, `missing_ga_confirm_days`,
-  `missing_ga_livebirth_days`): fetal deaths become a termination (NPR/KUHR ICD-10 O04, or KUHR ICPC-2 W83, from
-  28 days before to 7 days after the birth date), a stillbirth or a late spontaneous abortion (birth weight;
-  NPR/KUHR miscarriage codes when the weight is missing), with the median gestational age of their kind in the
-  MBRN; live births get 280 days. `ga_imputed` marks them.
+  `missing_ga_livebirth_days`). The MBRN category decides: induced abortions (`DODKAT` 10) are terminations (median
+  gestational age of the MBRN terminations), live births are live births (280 days), and fetal deaths are
+  stillbirths (235 days) or late spontaneous abortions (median of the MBRN late spontaneous abortions) by birth
+  weight; with the weight missing, a stillbirth unless NPR/KUHR has a miscarriage code (O02, O03, W82) from 28
+  days before to 7 days after the birth date. NPR/KUHR codes never make a termination. `ga_imputed` marks them.
 * `outcome_lable` keeps the labels of version 1.3. The new column `outcome_lable_new` has the new labels: "Live
   birth", "Late spontaneous abortion" for a miscarriage decided by the MBRN and "Spontaneous abortion" for one
   decided by NPR/KUHR, and the other outcomes as in `outcome_lable`.
-* [may be dropped] `missing_ga_min_gap_days = 28`: an imputed start is not earlier than 28 days after the
-  woman's previous outcome; `missing_ga_livebirth_min_days = 154`: a live birth left with less is not
-  imputed. `attr(res, "imputed_missing_ga")` lists every record considered.
+* A record is not imputed when its imputed start is less than 56 days after the woman's previous MBRN record,
+  or for a live birth below 154 days; the gestational age is never shortened. `attr(res, "imputed_missing_ga")`
+  lists every record considered.
 * `run_uio_pa()` writes a report on the MBRN records without gestational age (`missing_ga_report`,
   `missing_ga_outcome_days`, `missing_ga_marker_days`, `missing_ga_reject_days`, `nonlive_codes`;
   `uio_nonlive_codes()`) as Markdown, HTML and Word, with the tables as CSV files.

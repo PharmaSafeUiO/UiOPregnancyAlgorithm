@@ -74,26 +74,24 @@ Version 1.3 and 2.0.0 drop MBRN records without gestational age (`SVLEN_DG` miss
 `missing_ga_impute = TRUE` (the default on this branch) they are kept. Before the algorithm runs, MBRN **single** births
 without gestational age get one:
 
-* Fetal death (`DODKAT` 7-9), in this order: an NPR/KUHR termination code (ICD-10 O04; ICPC-2 W83 in KUHR)
-  from 28 days before to 7 days after the birth date (`missing_ga_confirm_days`): **termination**; weight
-  500 g or more: **stillbirth**; below 500 g: **late spontaneous abortion**; weight missing: late
-  spontaneous abortion if NPR/KUHR has a miscarriage code (ICD-10 O02, O03; ICPC-2 W82) in that window,
-  otherwise stillbirth.
-* Gestational age: the median of the MBRN records of the same kind with a recorded gestational age
-  (terminations: `DODKAT` 10, at least 84 days; stillbirths at least 154 days; late spontaneous abortions
-  84-153 days). Live births: `missing_ga_livebirth_days` (280).
-* *[may be dropped]* The start is not earlier than `missing_ga_min_gap_days` (28) days after the woman's
-  previous outcome (an MBRN birth, or an NPR/KUHR outcome code of the algorithm more than 28 days before the
-  birth date, dated as the algorithm dates repeated records); otherwise the gestational age is shortened. A
-  live birth left with less than `missing_ga_livebirth_min_days` (154) days is not imputed, and a stillbirth
-  without weight shortened below 154 days becomes a late spontaneous abortion.
+* The MBRN category decides; NPR/KUHR codes never make a termination:
+  * Induced abortion (`DODKAT` 10): **termination**, with the median gestational age of the MBRN terminations
+    with a recorded gestational age (at least 84 days).
+  * Live birth: **live birth**, with `missing_ga_livebirth_days` (280).
+  * Fetal death (`DODKAT` 7-9): weight 500 g or more: **stillbirth** (235 days); below 500 g: **late spontaneous
+    abortion** (the median gestational age of the MBRN late spontaneous abortions, 84-153 days); weight missing:
+    late spontaneous abortion if NPR/KUHR has a miscarriage code (ICD-10 O02, O03; ICPC-2 W82) from 28 days before
+    to 7 days after the birth date (`missing_ga_confirm_days`), otherwise stillbirth.
+* Not imputed (dropped, as in version 2.0.0) when the imputed start (birth date minus the imputed gestational age)
+  is less than 56 days after the woman's previous MBRN record, or for a live birth whose imputed gestational age is
+  below 154 days. The gestational age is never shortened.
 * The algorithm then runs unchanged on these records. `ga_imputed` marks them, `dating_method` says
   "MBRN (imputed GA: ...)". `outcome_lable` keeps the labels of version 1.3 ("Livebirth", "Miscarriage", ...);
   the new column `outcome_lable_new` says "Live birth" and separates late spontaneous abortions (MBRN) from
   spontaneous abortions (NPR/KUHR). `attr(res, "imputed_missing_ga")` lists every record considered (codes, previous
-  outcome, start moved, not imputed; with the women's IDs: keep inside TSD).
+  MBRN record, not imputed; with the women's IDs: keep inside TSD).
 
-Multiple births and induced abortions without gestational age are dropped, as in version 2.0.0.
+Multiple births without gestational age are dropped, as in version 2.0.0.
 
 **Report.** `run_uio_pa()` also describes the MBRN records without gestational age and the pregnancy that the
 algorithm finds for them in NPR and KUHR, and writes the answers to `output_dir/missing_ga/` as
