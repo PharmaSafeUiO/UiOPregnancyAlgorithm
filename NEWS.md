@@ -13,8 +13,9 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
   of induced abortions in the year of the outcome, from the Norwegian Registry of Pregnancy Termination,
   see `uio_termination_days_by_year()`; one number gives a fixed length), and the other values of
   version 1.3; in addition the birth weight
-  takes part in the stillbirth rule (`stillbirth_min_weight_g = 500`, `stillbirth_weight_rule = "and"`:
-  22 weeks and 500 g, the MBRN definition) when it is mapped.
+  takes part in the stillbirth rule when it is mapped (`stillbirth_min_weight_g = 500`): a fetal death is a
+  stillbirth from 22 weeks **or** 500 g, the MBRN definition. The setting `stillbirth_weight_rule` of the
+  earlier 2.0.0 builds ("and", "or", "weight_first") is removed: the rule is always "or".
 * New function `uio_v13_settings()`: the settings of the R script version 1.3.
 * New function `uio_termination_days_by_year()`: the median gestational age of induced abortions in
   Norway per year 2008-2024 (Registry of Pregnancy Termination, Tabell 6 of the FHI reports for 2024,
@@ -57,6 +58,20 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
 * `.dsv` and `.tsv` files are read as tab-separated, as before; a file whose header has no tab is read with
   the separator that `fread` detects. The P1380 KUHR files of the 2024 delivery are separated by `;`, so
   they could not be read before.
+* Diagnosis codes and code systems read from Latin-1 files (for example the letter O-slash in the P1380
+  KUHR files) are converted to UTF-8 in memory; before, the code normalisation stopped with "input string
+  ... is invalid" in a UTF-8 session.
+* Pregnancies without an outcome (`outcome_final` NA, kept as in version 1.3) no longer stop the HTML report:
+  they are left out of the tables and charts, and a note and a warning give their number. They are MBRN
+  multiple births whose combination of child outcomes the algorithm does not list (e.g. a triplet with two
+  live births and a miscarriage; any quadruplet other than four live births, or two miscarriages and two
+  terminations), or an MBRN `DODKAT` that is not a known code.
+* Memory: right after reading, NPR and KUHR are reduced to the records whose code the algorithm uses (the
+  markers and the outcome codes), in blocks; large projects (P704) ran out of memory before.
+* Pregnancy ids: the pregnancies of NPR only and of KUHR only were numbered from 1,000,001 and 2,000,001 (as in
+  version 1.3); with more than a million NPR records these numbers could be equal to other pregnancies' ids, and
+  records of different pregnancies (e.g. a KUHR miscarriage and an NPR termination) were merged. The numbering now
+  starts above the largest id in use, and a check stops the run if two pregnancies share an id.
 * The MBRN of current deliveries: the vital status `vital_status` (`leve_dodstatus_fodsel`: 1, 2, 3) can
   replace `death_cat` (`DODKAT`, old or 2024 coding), the gestational age in weeks `gestational_weeks`
   (`svlen`, used as weeks x 7 + 3 days) can replace `gestational_days`, and `abortion_weeks`
@@ -73,8 +88,6 @@ The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati
   computed the episode thresholds 1-60 days and used only 55; only the one that is used is now
   computed (same result, faster).
 * `o35_window_days` (27): an O35 code from the abortion date up to this many days after it.
-* `stillbirth_weight_rule = "and"`: stillbirth only from `stillbirth_min_days` and
-  `stillbirth_min_weight_g` (the gestational-age rule alone when the weight is missing).
 
 ## Other
 

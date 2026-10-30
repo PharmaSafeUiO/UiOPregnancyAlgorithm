@@ -43,7 +43,6 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   cfg_normalize_codes               = settings$normalize_codes
   # [v1.4.0] birth weight for stillbirth
   cfg_stillbirth_min_weight_g       = settings$stillbirth_min_weight_g
-  cfg_stillbirth_weight_rule        = settings$stillbirth_weight_rule
   # [v2.0.0] fixed values of v1.3 that are now settings (defaults = v1.3 values)
   cfg_marker_lookback_days          = settings$marker_lookback_days    # v1.3: 70
   cfg_same_event_days               = settings$same_event_days         # v1.3: 56
@@ -179,6 +178,44 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
 
   if(!"data.table"%in%class(kuhr_codes))
     kuhr_codes = as.data.table(kuhr_codes)
+
+  # Code patterns of the records used: dating markers and the outcome codes O00-O04 and O35 (ICD-10),
+  # plus the KUHR ICPC-2 markers and W82 (miscarriage)
+  npr_pattern = paste0(c(npr_codes[vocab=="ICD-10", code], c("O00","O01", "O02", "O03", "O04","O35")), collapse = "|")
+  kuhr_pattern = c("ICD-10" = paste0(c(kuhr_codes[vocab=="ICD-10", code], c("O00","O01", "O02", "O03", "O04","O35")), collapse = "|"),
+                   "ICPC-2" = paste0(c(kuhr_codes[vocab=="ICPC-2", code], "W82"), collapse = "|"))
+
+  # [v2.0.0] text read from Latin-1 files (e.g. the letter O-slash, byte D8, in the P1380 KUHR files) is not valid in a UTF-8 session, and the
+  # regular expressions below fail on it ("input string ... is invalid"): such strings are converted from Latin-1 to
+  # UTF-8 (in memory; the cached CSV files keep the bytes as read)
+  fix_encoding = function(v){
+    if(!is.character(v)) return(v)
+    bad = !is.na(v) & !validUTF8(v)
+    if(any(bad)) v[bad] = iconv(v[bad], from = "latin1", to = "UTF-8")
+    v
+  }
+
+  # [v2.0.0] memory: an NPR or KUHR extract can hold every diagnosis of every woman (P704: about 100 million NPR
+  # rows), and each full-length step below (encoding, normalisation, dates, year limit) made a copy of it. Right
+  # after reading, only the rows whose code matches a pattern of the code filter below are kept (the steps before
+  # that filter work row by row, so the result is the same). The codes are tested in blocks of 5 million rows, on
+  # the distinct codes of each block.
+  code_rows = function(code, vocab, patterns){
+    keep = logical(length(code))
+    for(s in seq.int(1, by = 5e6, length.out = ceiling(length(code) / 5e6))){
+      i = s:min(length(code), s + 5e6 - 1)
+      cd = fix_encoding(code[i])
+      if(isTRUE(cfg_normalize_codes)) cd = .uio_normalize_code(cd)
+      cd = as.character(cd)
+      v = fix_encoding(as.character(vocab[i]))
+      u = unique(cd)
+      k = logical(length(i))
+      for(nm in names(patterns))
+        k = k | (!is.na(v) & v == nm & cd %in% u[grepl(patterns[[nm]], u, perl = TRUE)])
+      keep[i] = k
+    }
+    keep
+  }
   cli::cli_alert_info("Loading source data")
 
   ################# Preloading Data ####################
@@ -260,6 +297,7 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   }else{
     npr = fread("hospital_full.csv")
   }
+  npr = npr[code_rows(tilst, vocab, c("ICD-10" = npr_pattern))]   # [v2.0.0] memory, see code_rows()
 
 
   if(!file.exists("primary_care_full.csv")){
@@ -298,6 +336,12 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   }else{
     kuhr = fread("primary_care_full.csv")
   }
+  kuhr = kuhr[code_rows(diagnose, diagnosekodeverk, kuhr_pattern)]   # [v2.0.0] memory, see code_rows()
+
+  # [v2.0.0] Latin-1 text to UTF-8 (fix_encoding() above)
+  npr[, tilst := fix_encoding(tilst)]
+  if("vocab" %in% names(npr)) npr[, vocab := fix_encoding(vocab)]
+  kuhr[, `:=`(diagnose = fix_encoding(diagnose), diagnosekodeverk = fix_encoding(diagnosekodeverk))]
 
   # [v1.3.1] normalise diagnosis codes in memory (never in the cached CSV files, written above):
   # drop every character that is not a letter or digit and convert to upper case, so that
@@ -330,12 +374,11 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
 
   hospital_codes = as.data.table(hospital_codes)
   primary_care_codes = as.data.table(primary_care_codes)
-  # Keep only the codes used later: dating markers and the outcome codes O00-O04 and O35 (ICD-10),
-  # plus the KUHR ICPC-2 markers and W82 (miscarriage)
+  # Keep only the codes used later (npr_pattern, kuhr_pattern)
   suppressWarnings(npr[, stay_id:=NULL])
-  npr = unique(npr[(vocab == "ICD-10" & grepl(paste0(c(hospital_codes[vocab=="ICD-10", code],c("O00","O01", "O02", "O03", "O04","O35")), collapse = "|"), tilst, perl = TRUE))])
-  kuhr = unique(kuhr[(diagnosekodeverk == "ICD-10" & grepl(paste0(c(primary_care_codes[vocab=="ICD-10", code],c("O00","O01", "O02", "O03", "O04","O35")), collapse = "|"), diagnose, perl = TRUE)) |
-                        (diagnosekodeverk == "ICPC-2" & grepl(paste0(c(primary_care_codes[vocab=="ICPC-2", code],"W82"), collapse = "|"), diagnose, perl = TRUE)) ])
+  npr = unique(npr[(vocab == "ICD-10" & grepl(npr_pattern, tilst, perl = TRUE))])
+  kuhr = unique(kuhr[(diagnosekodeverk == "ICD-10" & grepl(kuhr_pattern[["ICD-10"]], diagnose, perl = TRUE)) |
+                        (diagnosekodeverk == "ICPC-2" & grepl(kuhr_pattern[["ICPC-2"]], diagnose, perl = TRUE)) ])
 
   # [v2.0.0] the records used, kept for the description of the pregnancies and the code report (run_uio_pa())
   uio_capture = list(npr = npr[, .(ID, tilst, inndato)], kuhr = kuhr[, .(ID, diagnose, diagnosekodeverk, ant_dager)],
@@ -398,16 +441,12 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   # Categorise outcome of the offspring's vital status
   MBRN[, livebirth := ifelse(DODKAT %in% c(0:6,11:12), 1, NA)]
   if(use_weight){
-    # [v1.4.0] birth weight also decides: "or" = gestational-age rule or weight >= stillbirth_min_weight_g;
-    # [v2.0.0] "and" = gestational-age rule and weight >= limit (weight missing: gestational-age rule);
-    # "weight_first" = the weight when recorded, otherwise the gestational-age rule (weights <= 0 = missing)
+    # [v1.4.0] birth weight also decides: stillbirth if the gestational-age rule says so or the weight is at least
+    # stillbirth_min_weight_g (22 weeks or 500 g, the MBRN definition; weights <= 0 count as missing)
     ga_sb = if(is.null(cfg_stillbirth_min_days)) MBRN$SVLEN > 20 else MBRN$SVLEN_DG >= cfg_stillbirth_min_days
     wt = suppressWarnings(as.numeric(MBRN$VEKT))
     wt[!is.na(wt) & wt <= 0] = NA
-    sb = switch(cfg_stillbirth_weight_rule,
-                or           = ga_sb | (!is.na(wt) & wt >= cfg_stillbirth_min_weight_g),
-                and          = ga_sb & (is.na(wt) | wt >= cfg_stillbirth_min_weight_g),   # [v2.0.0]
-                weight_first = fifelse(!is.na(wt), wt >= cfg_stillbirth_min_weight_g, ga_sb))
+    sb = ga_sb | (!is.na(wt) & wt >= cfg_stillbirth_min_weight_g)
     MBRN[, miscar_3 := ifelse(DODKAT %in% c(7:9) & !sb, 1, NA)]
     MBRN[, stillbirth := ifelse((DODKAT %in% c(7:9)) & sb, 1, NA)]
   }else if(is.null(cfg_stillbirth_min_days)){
@@ -922,7 +961,13 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
              NPR_TOP_misclassified = fifelse(top_NPR_only == 1 & (MBRN_livebirth == 1 | MBRN_miscarriage == 1 | MBRN_stillbirth == 1), 1, NA_integer_))]
 
   # Assign a new pregnancy ID for events only identified in NPR (as they would not be identified in MBRN)
-  NPR[, preg_id := fifelse(is.na(preg_id), .I + 1000000, preg_id)] #TODO: Change 1000000 with max(preg_id)
+  # [v2.0.0] v1.3 added 1000000 to the row number: with more than 1 million MBRN pregnancies (ids = row numbers) the ids
+  # collided, and with more than 1 million rows here the NPR ids reached the KUHR ids (2000000 + row number, BLOCK 11),
+  # so the merge by preg_id joined a KUHR-only miscarriage of one woman to an NPR pregnancy of another (the KUHR
+  # miscarriage was lost and the other woman got a second pregnancy on her NPR outcome date). The offset is now
+  # 1000000 or the largest id already given, whichever is larger (the same ids as v1.3 when there is no collision).
+  npr_id_offset = max(1000000, suppressWarnings(max(NPR$preg_id, na.rm = TRUE)), suppressWarnings(max(MBRN_for_analysis$preg_id, na.rm = TRUE)))
+  NPR[, preg_id := fifelse(is.na(preg_id), .I + npr_id_offset, preg_id)]
 
   # Drop unnecessary variables
   NPR <- NPR[, !c("SVLEN_DG", "MBRN_livebirth", "MBRN_miscarriage", "MBRN_stillbirth", "MBRN_TOP", "stay_id", "diagno", "tilst"), with = FALSE]
@@ -1155,7 +1200,11 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   cli::cli_progress_update()
   setorder(MBRN, ID, -date_outcome, na.last = TRUE)
   # Assign a new pregnancy ID for miscarriages identified in KUHR
-  MBRN[, preg_id := fifelse(is.na(preg_id), .I + 2000000,preg_id)]
+  # [v2.0.0] offset 2000000 or the largest id of the MBRN and NPR pregnancies, whichever is larger (see the NPR ids above)
+  kuhr_id_offset = max(2000000, suppressWarnings(max(MBRN$preg_id, na.rm = TRUE)), suppressWarnings(max(MBRN_NPR_for_analysis$preg_id, na.rm = TRUE)))
+  MBRN[, preg_id := fifelse(is.na(preg_id), .I + kuhr_id_offset, preg_id)]
+  if(anyDuplicated(MBRN$preg_id[MBRN$preg_id > kuhr_id_offset]) || any(MBRN$preg_id[MBRN$preg_id > kuhr_id_offset] %in% MBRN_NPR_for_analysis$preg_id))
+    stop("Internal error: the KUHR pregnancy ids are not unique.", call. = FALSE)
 
   # Drop unnecessary variables
   MBRN <- MBRN[, !c("SVLEN_DG", "MBRN_livebirth", "date_outcome", "MBRN_miscarriage", "MBRN_stillbirth",

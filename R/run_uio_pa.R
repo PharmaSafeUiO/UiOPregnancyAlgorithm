@@ -74,10 +74,9 @@
 #'   used (MBRN births after `last_year` are kept). Default `c(2008, 2023)`.
 #' @param stillbirth_min_days Gestational age in days from which an MBRN fetal death is a
 #'   stillbirth. Default `154` (22+0 weeks); `NULL` = version 1.3 rule (from 147 days).
-#' @param stillbirth_min_weight_g Birth weight in grams that also decides between stillbirth and
-#'   miscarriage. Default `500`; used when the birth weight is mapped, `NULL` turns it off.
-#' @param stillbirth_weight_rule `"and"` (default: 22 weeks and 500 g, the MBRN definition), `"or"`
-#'   or `"weight_first"`: how the weight and the gestational-age rule are combined.
+#' @param stillbirth_min_weight_g Birth weight in grams from which an MBRN fetal death is a stillbirth
+#'   whatever its gestational age (22 weeks or 500 g). Default `500`; used when the birth weight is
+#'   mapped, `NULL` turns it off.
 #' @param marker_rejection_days A marker is used only within this many days before the outcome,
 #'   and a marker-implied length of this many days or more is rejected; if all markers are
 #'   rejected, the pregnancy gets this length. Default `119` (17+0 weeks).
@@ -174,7 +173,6 @@ run_uio_pa <- function(workdir,
                        years_range = c(2008, 2023),
                        stillbirth_min_days = 154,
                        stillbirth_min_weight_g = 500,
-                       stillbirth_weight_rule = "and",
                        marker_rejection_days = 119,
                        marker_lookback_days = 70,
                        same_event_days = 56,
@@ -218,6 +216,17 @@ run_uio_pa <- function(workdir,
     notes <- c(notes, "Birth weight not mapped: stillbirth decided by gestational age only.")
   notes <- c(notes, .uio_extrapolation_notes(cap$extrapolated))
   out <- .uio_describe(res, cap, settings, hospital_codes, primary_care_codes)
+  # pregnancies without an outcome (kept, as in v1.3): MBRN multiple births whose combination of child outcomes is not
+  # one of those the algorithm lists (e.g. a triplet with two live births and a miscarriage; quadruplets other than
+  # four live births or two miscarriages and two terminations), or an MBRN DODKAT that is not a known code
+  n_na <- sum(is.na(out$outcome_final))
+  if (n_na) {
+    notes <- c(notes, paste0(.uio_mask(n_na, max(mask_below, 1)), " pregnancies have no outcome (outcome_final NA): MBRN multiple births ",
+                             "whose combination of child outcomes is not one the algorithm lists (e.g. a triplet with two live births ",
+                             "and a miscarriage), or an MBRN DODKAT that is not a known code. They are kept in the result, as in version ",
+                             "1.3, but are not in the outcome tables and charts; codes_mbrn shows their DODKAT values."))
+    cli::cli_alert_warning("{n_na} pregnanc{?y has/ies have} no outcome (MBRN multiple birth with a combination of outcomes the algorithm does not list, or an unknown DODKAT): kept with outcome_final NA, not in the tables. See res[is.na(outcome_final)].")
+  }
   avail <- .uio_code_availability(cap, settings, hospital_codes, primary_care_codes)
   rm(res, cap)
   setattr(out, "settings", settings)

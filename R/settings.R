@@ -3,7 +3,7 @@
 #' `uio_default_settings()` returns the named list of settings of [run_uio_pa()] with their
 #' default values. The defaults are the settings of the main analysis of the four-algorithm
 #' comparison (Nordeng, Hayati and van Gelder), with birth weight added to the stillbirth rule
-#' (the MBRN definition). `uio_v13_settings()` returns the settings that
+#' (the MBRN definition: 22 weeks or 500 g). `uio_v13_settings()` returns the settings that
 #' differ from these defaults in version 1.3 of the algorithm (the R translation of the STATA
 #' script): `run_uio_pa(..., settings = uio_v13_settings())` runs the algorithm with the rules of
 #' version 1.3.
@@ -23,24 +23,16 @@
 #' @section Settings:
 #' \describe{
 #'   \item{`stillbirth_min_days`}{Gestational age (days) from which an MBRN fetal death
-#'     (`DODKAT` 7-9) is a stillbirth; below it, it is a miscarriage. Default `154` (22+0 weeks,
-#'     the MBRN definition). `NULL` gives the rule of version 1.3: stillbirth if the completed
+#'     (`DODKAT` 7-9) is a stillbirth. Default `154` (22+0 weeks, the MBRN definition). A fetal
+#'     death is a stillbirth if it reaches this gestational age **or** `stillbirth_min_weight_g`;
+#'     otherwise it is a miscarriage. `NULL` gives the rule of version 1.3: stillbirth if the completed
 #'     weeks `floor(SVLEN_DG / 7) > 20`, i.e. from 147 days (21+0 weeks).}
-#'   \item{`stillbirth_min_weight_g`}{Birth weight in grams that also decides between stillbirth
-#'     and miscarriage for an MBRN fetal death, as set by `stillbirth_weight_rule`. Default `500`.
+#'   \item{`stillbirth_min_weight_g`}{Birth weight in grams from which an MBRN fetal death is a
+#'     stillbirth, whatever its gestational age (22 weeks **or** 500 g, the MBRN definition). Default `500`.
 #'     It is used when the birth weight is mapped (`birth_weight` in [uio_source()], `VEKT` /
 #'     `vekt` in the MBRN); otherwise the run says so and uses gestational age alone. `NULL` turns
 #'     it off. Weights of 0 or below count as missing. MBRN records without gestational age are
 #'     dropped whatever the weight, as in version 1.3.}
-#'   \item{`stillbirth_weight_rule`}{How birth weight and gestational age are combined:
-#'     `"and"` (default): stillbirth only if the gestational-age rule says stillbirth **and** the
-#'     weight is at least the limit; the gestational-age rule alone when the weight is missing (a
-#'     fetus born before 22 weeks, or below 500 g, is a miscarriage: the MBRN definition, FHI
-#'     notification guide 2022);
-#'     `"or"`: stillbirth if the gestational-age rule says stillbirth **or** the weight is at least
-#'     the limit (22 weeks or 500 g, the definition used in some FHI statistics);
-#'     `"weight_first"`: the weight decides when it is recorded, the gestational-age rule when it is
-#'     missing.}
 #'   \item{`marker_rejection_days`}{The marker rule for pregnancies that are not dated by the
 #'     MBRN. A pregnancy marker is used only if it is recorded within this many days before the
 #'     outcome, and a marker that implies a pregnancy length (outcome date - marker date + the
@@ -97,7 +89,6 @@ uio_default_settings <- function() {
   list(
     stillbirth_min_days           = 154,
     stillbirth_min_weight_g       = 500,
-    stillbirth_weight_rule        = "and",
     marker_rejection_days         = 119,
     marker_lookback_days          = 70,
     same_event_days               = 56,
@@ -170,9 +161,6 @@ uio_v13_settings <- function() {
       stop("Setting `stillbirth_min_weight_g` must be NULL or a single positive number of grams.", call. = FALSE)
     out["stillbirth_min_weight_g"] <- list(as.numeric(v))
   }
-  if (!is.character(out$stillbirth_weight_rule) || length(out$stillbirth_weight_rule) != 1L ||
-      !out$stillbirth_weight_rule %in% c("or", "and", "weight_first"))
-    stop("Setting `stillbirth_weight_rule` must be \"or\", \"and\" or \"weight_first\".", call. = FALSE)
   if (!is.null(out$stillbirth_min_days)) {
     if (!is_whole_days(out$stillbirth_min_days))
       stop("Setting `stillbirth_min_days` must be NULL or a single non-negative whole number of days.", call. = FALSE)

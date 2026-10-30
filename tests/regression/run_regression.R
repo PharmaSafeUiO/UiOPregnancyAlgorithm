@@ -16,7 +16,7 @@
 ##  6. on data without quadruplets (where v1.3 lines 481-482 run) the package works and gives the same
 ##     results; the original v1.3 fails there on data.table >= 1.17 (with=FALSE + := is an error)
 ##  7. [v1.4.0] birth weight for stillbirth, year-specific induced-abortion defaults
-##  8. [v2.0.0] settings as arguments, the defaults, the "and" weight rule, and the former fixed values
+##  8. [v2.0.0] settings as arguments, the defaults, the weight rule (22 weeks or 500 g), and the former fixed values
 args <- commandArgs(TRUE)
 getarg <- function(name, default) {
   a <- grep(paste0("^--", name, "="), args, value = TRUE)
@@ -243,11 +243,11 @@ print(changed_rows(S$b, S$d, "d"))
 cmp_expected(S$d, exp_d, "(d) differs from v1.3 exactly as expected")
 
 exp_e <- modify(expected_b, data.table(
-  ID = c(2L, 3L, 4L, 5L, 6L, 9L), date_outcome = c("2016-03-10", "2017-04-20", "2018-02-14", "2019-05-05", "2019-08-08", "2018-09-09"),
-  outcome = c(2, 2, 3, 2, 2, 2), GA_days = c(150, 84, 46, 70, 70, 74),
-  dating_method = c("MBRN (recorded GA)", "pregnancy marker", "fixed outcome-specific default", "fixed outcome-specific default", "fixed outcome-specific default", "pregnancy marker")))
+  ID = c(3L, 4L, 5L, 6L, 9L), date_outcome = c("2017-04-20", "2018-02-14", "2019-05-05", "2019-08-08", "2018-09-09"),
+  outcome = c(2, 3, 2, 2, 2), GA_days = c(84, 46, 70, 70, 74),
+  dating_method = c("pregnancy marker", "fixed outcome-specific default", "fixed outcome-specific default", "fixed outcome-specific default", "pregnancy marker")))
 cat("\n(e) all defaults of version 2.0.0 (stillbirth from 154 days, marker rule 119 days, induced-abortion default = registry median of the year, normalize_codes = TRUE)\n")
-cat("    expected changes vs v1.3: W2 150-day fetal death -> miscarriage; W3 marker-implied 84 d accepted (< 119);\n",
+cat("    expected changes vs v1.3: W2 (150 days, 560 g) stays a stillbirth (22 weeks or 500 g); W3 marker-implied 84 d accepted (< 119);\n",
     "   W4 abortion without marker 46 d (registry median 2018); W5, W6, W9 through the normalised codes.\n")
 print(changed_rows(S$b, S$e, "e"))
 cmp_expected(S$e, exp_e, "(e) the 2.0.0 defaults differ from v1.3 exactly as expected")
@@ -289,13 +289,9 @@ if (attr(o_nq, "status") == 0L) {
 ## ---- 7. new settings of version 1.4.0 ------------------------------------------------------------
 cat("\n== 7. version 1.4.0 settings (all with normalize_codes = FALSE) ==\n")
 check("the birth-weight run adds VEKT to the cached MBRN file", "VEKT" %in% pk$mbrn_cols_after_f)
-cat("(f) stillbirth_min_days = 154, stillbirth_min_weight_g = 500 (rule \"or\"): W2 (150 days, 560 g) stays a stillbirth;\n",
+cat("(f) stillbirth_min_days = 154, stillbirth_min_weight_g = 500 (22 weeks or 500 g): W2 (150 days, 560 g) stays a stillbirth;\n",
     "   W14 (120 days, 300 g) stays a miscarriage; so (f) equals v1.3.\n")
 cmp_expected(S$f, expected_b, "(f) equals the v1.3 expectations (W2 stillbirth by weight, although below 154 days)")
-exp_g <- modify(expected_b, data.table(ID = 2L, date_outcome = "2016-03-10", outcome = 2, GA_days = 150, dating_method = "MBRN (recorded GA)"))
-cat("(g) stillbirth_min_weight_g = 600, rule \"weight_first\": W2 (560 g) becomes a miscarriage although 21 completed weeks.\n")
-print(changed_rows(S$b, S$g, "g"))
-cmp_expected(S$g, exp_g, "(g) differs from v1.3 exactly as expected")
 exp_h <- modify(expected_b, data.table(ID = 4L, date_outcome = "2018-02-14", outcome = 3, GA_days = 47, dating_method = "fixed outcome-specific default"))
 cat("(h) induced_abortion_default_days = table 2015: 47, 2019: 45 -> W4 (2018) gets 47 days (closest earlier year).\n")
 print(changed_rows(S$b, S$h, "h"))
@@ -310,13 +306,19 @@ cat("  argument and list together give: ", pk$both_message, "\n", sep = "")
 check("a setting given both as an argument and in `settings` is an error", grepl("both as an argument", pk$both_message, fixed = TRUE))
 check("(r) a KUHR column name given in lower case is matched to the file's column: same result as the defaults", all(same_dt(runs$e, runs$r)))
 cat("  missing source column gives: ", pk$missing_col_message, "\n", sep = "")
+nd <- pk$multiples
+if (!is.null(nd$error)) cat("  (t) error: ", nd$error, "\n", sep = "")
+if (is.null(nd$error)) { cat("  (t) W41 triplet, W42 quadruplet: 2.0.0 defaults, then v1.3 settings\n"); print(nd$res[ID %in% 41:42, .(ID, outcome_final, codes_mbrn)]); print(nd$res13[ID %in% 41:42, .(ID, outcome_final, codes_mbrn)]) }
+check("(t) triplet LLM and quadruplet LLLS get no outcome (2.0.0); with v1.3 settings the triplet is LLS (stillbirth)",
+      is.null(nd$error) && identical(nd$res[ID %in% 41:42][order(ID), outcome_final], c(NA_integer_, NA_integer_)) &&
+        identical(as.integer(nd$res13[ID %in% 41:42][order(ID), outcome_final]), c(4L, NA_integer_)))
+check("(t) pregnancies without outcome: report, CSV files and a note are written; the other pregnancies are unchanged",
+      is.null(nd$error) && nrow(nd$res[!is.na(outcome_final)]) == nrow(runs$o) &&
+        all(c("uio_report.html", "uio_outcomes.csv", "uio_pregnancies.rds") %in% nd$files) &&
+        any(grepl("pregnancies have no outcome", nd$html, fixed = TRUE)))
 check("(s) a missing source column is an error that names the column and lists the file's columns",
       grepl("PASIENTLOPENUMMER not found in", pk$missing_col_message, fixed = TRUE) &&
         grepl("Columns of this file: PasientLopeNr_PDB2774", pk$missing_col_message, fixed = TRUE))
-exp_m <- modify(expected_b, data.table(ID = 2L, date_outcome = "2016-03-10", outcome = 2, GA_days = 150, dating_method = "MBRN (recorded GA)"))
-cat("(m) stillbirth_min_days = 154, stillbirth_min_weight_g = 500, rule \"and\": W2 (150 days, 560 g) becomes a miscarriage.\n")
-print(changed_rows(S$b, S$m, "m"))
-cmp_expected(S$m, exp_m, "(m) differs from v1.3 exactly as expected")
 check("(n0) same_event_days = 56, marker_lookback_days = 70, o35_window_days = 27 given explicitly == v1.3", all(same_dt(runs$b, runs$n0)))
 cat("(n) same_event_days = 30, marker_lookback_days = 40, o35_window_days = 5: changed pregnancies vs v1.3\n")
 print(changed_rows(S$b, S$n, "n"))

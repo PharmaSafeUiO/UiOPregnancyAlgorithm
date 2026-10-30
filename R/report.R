@@ -36,7 +36,7 @@
   # MBRN: vital status (DODKAT) of the children born on the outcome date, and the mother's age then
   mb <- mbrn[r[outcome_source == "MBRN", .(rid, ID, d = dout)], on = .(ID, d), nomatch = 0L]
   if (nrow(mb)) {
-    mb_codes <- mb[, .(codes_mbrn = paste0("DODKAT ", paste(sort(unique(DODKAT)), collapse = "/")),
+    mb_codes <- mb[, .(codes_mbrn = paste0("DODKAT ", paste(sort(unique(DODKAT), na.last = TRUE), collapse = "/")),
                        age_mbrn = suppressWarnings(as.numeric(MORS_ALDER[1]))), by = rid]
     r[mb_codes, on = "rid", `:=`(codes_mbrn = i.codes_mbrn, age_mbrn = i.age_mbrn)]
   }
@@ -140,7 +140,7 @@
 # ---- tables used by the summary and the report --------------------------------------------------------------------
 .uio_outcome_table <- function(d) {
   o <- data.table::copy(.uio_outcomes)[, .(outcome_final, outcome = outcome_lable)]
-  s <- d[, .(n = .N, ga_median = as.numeric(stats::median(GA_event_days_final)),
+  s <- d[!is.na(outcome_final), .(n = .N, ga_median = as.numeric(stats::median(GA_event_days_final)),
              ga_q1 = round(as.numeric(stats::quantile(GA_event_days_final, 0.25, names = FALSE))),
              ga_q3 = round(as.numeric(stats::quantile(GA_event_days_final, 0.75, names = FALSE))),
              ga_min = as.numeric(min(GA_event_days_final)), ga_max = as.numeric(max(GA_event_days_final)),

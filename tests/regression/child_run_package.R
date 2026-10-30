@@ -49,7 +49,7 @@ stopifnot(identical(getwd(), owd))
 
 # [v1.4.0] new settings (after cache_after: the birth-weight runs add the weight column to the MBRN cache)
 runs$f <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
-                     settings = modifyList(v13, list(stillbirth_min_days = 154, stillbirth_min_weight_g = 500, stillbirth_weight_rule = "or")))
+                     settings = modifyList(v13, list(stillbirth_min_days = 154, stillbirth_min_weight_g = 500)))
 mbrn_cols_after_f <- names(data.table::fread(file.path(p$workdir, "birth_registry_full.csv"), nrows = 0))
 # (e) all defaults (version 2.0.0: stillbirth from 154 days and 500 g, marker rule 119 days, normalize_codes = TRUE)
 runs$e <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023))
@@ -64,11 +64,6 @@ outcomes_csv <- data.table::fread(file.path(out_dir, "uio_outcomes.csv"), colCla
 avail_csv <- data.table::fread(file.path(out_dir, "uio_code_availability.csv"), colClasses = "character")
 html <- readLines(file.path(out_dir, "uio_report.html"), warn = FALSE, encoding = "UTF-8")
 summary_text <- capture.output(invisible(run_uio_pa(workdir = p$workdir, source_files = src, years_range = c(2008, 2023), output_dir = NULL)))
-runs$g <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
-                     settings = modifyList(v13, list(stillbirth_min_weight_g = 600, stillbirth_weight_rule = "weight_first")))
-# (m) [v2.0.0] rule "and": stillbirth only from 154 days and 500 g
-runs$m <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
-                     settings = modifyList(v13, list(stillbirth_min_days = 154, stillbirth_min_weight_g = 500, stillbirth_weight_rule = "and")))
 # (n) [v2.0.0] the fixed values of v1.3 that are now settings, at their v1.3 values and changed
 runs$n0 <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 2023),
                       settings = modifyList(v13, list(same_event_days = 56, marker_lookback_days = 70, o35_window_days = 27)))
@@ -107,7 +102,33 @@ src_s <- src; src_s$primary_care$variables["mother_id"] <- "PASIENTLOPENUMMER"
 wd_s <- file.path(dirname(p$workdir), "wd_missing_col"); dir.create(wd_s, showWarnings = FALSE)
 missing_col <- tryCatch(rp(workdir = wd_s, source_files = src_s, years_range = c(2008, 2023)), error = function(e) conditionMessage(e))
 
-saveRDS(list(runs = runs, cache_before = cache_before, cache_after = cache_after,
+# (t) [v2.0.0] MBRN multiple births whose combination of child outcomes the algorithm does not list get no outcome
+# (as in v1.3): W41 triplet with two live births and a fetal death of 150 days and 400 g (a miscarriage with the 2.0.0
+# rule, LLM; a stillbirth with the v1.3 rule, 21 completed weeks, LLS), W42 quadruplet with three live births and a
+# stillbirth (210 days, LLLS). The
+# summary, the CSV files and the HTML report still work and say how many there are.
+raw_t <- file.path(dirname(p$workdir), "raw_multiples"); dir.create(raw_t, showWarnings = FALSE)
+file.copy(list.files(p$raw_dir, full.names = TRUE), raw_t, recursive = TRUE)
+f_t <- list.files(file.path(raw_t, "MFR"), full.names = TRUE)
+off_t <- function(d) as.integer(as.Date(d) - (as.Date("2004-01-01") - 10234))
+m_t <- data.table::fread(f_t)
+m_t <- rbind(m_t, data.table::data.table(
+  MOR_PasientLopeNr_PDB2774 = c(41L, 41L, 41L, 42L, 42L, 42L, 42L), BARN_LOPENR = 401:407, MORS_ALDER = 30L,
+  FDATO_DIFF = off_t(c(rep("2017-07-07", 3), rep("2019-03-03", 4))), PLUREK = c(1:3, 1:4),
+  SVLEN_DG = c(150L, 150L, 150L, 210L, 210L, 210L, 210L), DODKAT = c(0L, 0L, 7L, 0L, 0L, 0L, 8L),
+  APGAR5 = c(8L, 8L, 0L, 7L, 7L, 7L, 0L), MOR_FAAR = 1987L, VEKT = c(900L, 950L, 400L, 1000L, 1000L, 1000L, 450L)))
+data.table::fwrite(m_t, f_t)
+wd_t <- file.path(dirname(p$workdir), "wd_multiples"); dir.create(wd_t, showWarnings = FALSE)
+out_t <- file.path(dirname(p$workdir), "output_t")
+multiples <- tryCatch({
+  txt <- capture.output(r_t <- run_uio_pa(workdir = wd_t, source_files = uio_project_sources("p1111", raw_dir = raw_t),
+                                          years_range = c(2008, 2023), output_dir = out_t))
+  r_t13 <- run_uio_pa(workdir = wd_t, source_files = uio_project_sources("p1111", raw_dir = raw_t), years_range = c(2008, 2023),
+                      output_dir = NULL, verbose = FALSE, settings = uio_v13_settings())
+  list(res = r_t, res13 = r_t13, files = list.files(out_t), html = readLines(file.path(out_t, "uio_report.html"), warn = FALSE, encoding = "UTF-8"))
+}, error = function(e) list(error = conditionMessage(e)))
+
+saveRDS(list(runs = runs, cache_before = cache_before, cache_after = cache_after, multiples = multiples,
              error_message = err, wd_restored_after_error = wd_restored_after_error,
              bad_setting_message = bad, both_message = both, missing_col_message = missing_col,
              formals_defaults = lapply(formals(run_uio_pa)[names(uio_default_settings())], eval),

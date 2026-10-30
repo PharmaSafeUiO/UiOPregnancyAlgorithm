@@ -12,8 +12,8 @@
 ##   1  live birth with GA (MBRN) + an earlier birth in 2005 (dropped by years_range) + markers
 ##      during the pregnancy; F-diagnoses in BUP and PHV
 ##   2  MBRN fetal death (DODKAT 7) at 150 days: stillbirth with the v1.3 rule (floor(150/7) = 21 > 20),
-##      miscarriage with stillbirth_min_days = 154. Birth weight 560 g (v1.4.0 tests: stillbirth with
-##      154 days or 500 g; miscarriage with weight_first and 600 g)
+##      miscarriage with stillbirth_min_days = 154 alone. Birth weight 560 g: a stillbirth with the 2.0.0 rule
+##      (154 days or 500 g))
 ##   3  NPR miscarriage O039 with marker Z321 20 days before (implied GA 20 + 64 = 84 days: rejected by
 ##      the 84-day rule, so dated 84 d; accepted with marker_rejection_days = 91)
 ##   4  NPR induced abortion O049 without marker (56 d in v1.3; 49 d with induced_abortion_default_days = 49;

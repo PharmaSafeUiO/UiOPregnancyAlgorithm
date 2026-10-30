@@ -71,6 +71,7 @@
 }
 
 .uio_html_report <- function(d, avail, settings, notes, file, mask = 5) {
+  d <- d[!is.na(outcome_final)]   # pregnancies without an outcome are counted in the notes, not in the tables
   oc <- .uio_outcome_table(d)
   cols <- c("var(--o1)", "var(--o2)", "var(--o3)", "var(--o4)", "var(--o5)", "var(--o6)")
   version <- tryCatch(format(utils::packageVersion("UiOPregnancyAlgorithm")), error = function(e) "")

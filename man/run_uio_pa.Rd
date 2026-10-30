@@ -12,7 +12,6 @@ run_uio_pa(
   years_range = c(2008, 2023),
   stillbirth_min_days = 154,
   stillbirth_min_weight_g = 500,
-  stillbirth_weight_rule = "and",
   marker_rejection_days = 119,
   marker_lookback_days = 70,
   same_event_days = 56,
@@ -47,11 +46,9 @@ used (MBRN births after \code{last_year} are kept). Default \code{c(2008, 2023)}
 \item{stillbirth_min_days}{Gestational age in days from which an MBRN fetal death is a
 stillbirth. Default \code{154} (22+0 weeks); \code{NULL} = version 1.3 rule (from 147 days).}
 
-\item{stillbirth_min_weight_g}{Birth weight in grams that also decides between stillbirth and
-miscarriage. Default \code{500}; used when the birth weight is mapped, \code{NULL} turns it off.}
-
-\item{stillbirth_weight_rule}{\code{"and"} (default: 22 weeks and 500 g, the MBRN definition), \code{"or"}
-or \code{"weight_first"}: how the weight and the gestational-age rule are combined.}
+\item{stillbirth_min_weight_g}{Birth weight in grams from which an MBRN fetal death is a stillbirth
+whatever its gestational age (22 weeks or 500 g). Default \code{500}; used when the birth weight is
+mapped, \code{NULL} turns it off.}
 
 \item{marker_rejection_days}{A marker is used only within this many days before the outcome,
 and a marker-implied length of this many days or more is rejected; if all markers are

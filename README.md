@@ -87,8 +87,7 @@ the main analysis of the four-algorithm comparison, with birth weight added to t
 | Argument | Default | Meaning |
 |---|---|---|
 | `stillbirth_min_days` | `154` | an MBRN fetal death from this gestational age (days) is a stillbirth, below it a miscarriage (154 = 22+0 weeks, the MBRN definition); `NULL` = rule of version 1.3 (completed weeks > 20, i.e. from 147 days) |
-| `stillbirth_min_weight_g` | `500` | birth weight (g) that also decides stillbirth vs miscarriage; used when the birth weight is mapped, `NULL` turns it off |
-| `stillbirth_weight_rule` | `"and"` | `"and"`: 22 weeks **and** 500 g, weeks only when the weight is missing (the MBRN definition); `"or"`: 22 weeks **or** 500 g; `"weight_first"`: weight when recorded, else weeks |
+| `stillbirth_min_weight_g` | `500` | a fetal death is a stillbirth from 22 weeks **or** from this birth weight (g), the MBRN definition; used when the birth weight is mapped, `NULL` turns it off |
 | `marker_rejection_days` | `119` | a marker-based estimate of 119 days (17 weeks) or more is rejected and the next marker tried; if all are rejected the pregnancy gets 119 days |
 | `marker_lookback_days` | `70` | markers are searched from this many days before the outcome |
 | `same_event_days` | `56` | records less than 56 days apart are the same event (repeated contacts for one miscarriage or abortion; records shortly after a birth) |

@@ -60,6 +60,9 @@ k_tab <- seq_len(nrow(k1380)) %% 2L == 0L
 for (yr in unique(substr(k1380$DATO[!k_tab], 1, 4)))
   fwrite(k1380[!k_tab][substr(DATO, 1, 4) == yr], file.path(r1380, "KUHR", paste0(yr, " Data fra KUHR 20-31226.dsv")), sep = ";")
 fwrite(k1380[k_tab, .(PASIENTLOPENUMMER, DIAGNOSE_KODE, DIAGNOSEKODEVERK, DATO, PASIENT_KJONN)], file.path(r1380, "KUHR", "kuhr_tab.dsv"), sep = "\t")
+# a Latin-1 code (byte D8 = O-slash), not valid UTF-8, as in the P1380 KUHR files: it must not stop the run
+f_l1 <- list.files(file.path(r1380, "KUHR"), pattern = "Data fra KUHR", full.names = TRUE)[1]
+con <- file(f_l1, "ab"); writeBin(c(charToRaw("11;LE;1;1;3;3;2;30;20130101;"), as.raw(0xd8), charToRaw("188;1;ICPC-2\n")), con); close(con)
 res$p1380 <- run("p1380", uio_project_sources("p1380", raw_dir = r1380))
 
 ## Generic layout: MBRN with real dates as text ("dmy"); NPR as one long file and KUHR, both with day offsets from
