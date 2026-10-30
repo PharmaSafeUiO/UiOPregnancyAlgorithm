@@ -26,7 +26,15 @@ run_uio_pa(
   output_dir = file.path(workdir, "output"),
   report = TRUE,
   mask_below = 5,
-  verbose = TRUE
+  verbose = TRUE,
+  missing_ga_report = TRUE,
+  missing_ga_outcome_days = c(before = 55, after = 55),
+  missing_ga_marker_days = NULL,
+  missing_ga_reject_days = NULL,
+  missing_ga_impute = TRUE,
+  missing_ga_confirm_days = c(before = 28, after = 7),
+  missing_ga_livebirth_days = 280,
+  nonlive_codes = uio_nonlive_codes()
 )
 }
 \arguments{
@@ -83,6 +91,46 @@ matching. Default \code{TRUE}.}
 as \code{"<5"} (default \code{5}), so that they can be exported from TSD. \code{0} shows all counts.}
 
 \item{verbose}{Print the summary at the end of the run. Default \code{TRUE}.}
+
+\item{missing_ga_report}{[experimental] Describe the MBRN records without gestational age (which
+the algorithm drops): the NPR/KUHR outcome codes around the birth date (does NPR/KUHR confirm the
+outcome?), the pregnancy markers before it (can the start be estimated?), and the pregnancy that the
+current algorithm builds, for fetal deaths by birth weight and for live births. The report is
+written to \code{output_dir/missing_ga} as \code{missing_ga_report.md}, \code{.html} and \code{.docx}, with the tables as
+CSV files (counts masked with \code{mask_below}), and attached to the result as \code{attr(result, "missing_ga")}
+(unmasked, with the women's IDs: keep it inside TSD). Default \code{TRUE}.}
+
+\item{missing_ga_outcome_days}{[experimental] \code{c(before =, after =)}: outcome codes (and the pregnancy
+of the current algorithm) are searched from \code{before} days before to \code{after} days after the MBRN birth
+date. Default \code{c(before = 55, after = 55)} (\code{same_event_days - 1}: the algorithm's same-event window).}
+
+\item{missing_ga_marker_days, missing_ga_reject_days}{[experimental] Pregnancy markers are searched from
+\code{missing_ga_marker_days} days before the birth date up to it, and a marker that implies
+\code{missing_ga_reject_days} days or more is rejected. \code{NULL} (default): the run's \code{marker_lookback_days}
+and \code{marker_rejection_days} (70 and 119), as in the algorithm.}
+
+\item{missing_ga_impute}{[experimental] If \code{TRUE} (default), MBRN single births without gestational age are
+kept with an imputed gestational age. The MBRN category decides: an induced abortion (\code{DODKAT} 10) is a termination
+(the median gestational age of the MBRN terminations), a live birth is a live birth (\code{missing_ga_livebirth_days}),
+and a fetal death (\code{DODKAT} 7-9) is a stillbirth (235 days) or a late spontaneous abortion (the
+median gestational age of the MBRN late spontaneous abortions): stillbirth if the weight is at least
+\code{stillbirth_min_weight_g}, late spontaneous abortion if it is below; weight missing: late spontaneous abortion if
+NPR/KUHR has a miscarriage code around the birth date (\code{missing_ga_confirm_days}), otherwise stillbirth. NPR/KUHR
+codes never make a termination. A record is not imputed (dropped, as in the main package) when its imputed start
+(birth date minus the imputed gestational age) is less than 56 days after the woman's previous MBRN record, or for a
+live birth when the imputed gestational age is below 154 days. \code{dating_method} then says "MBRN (imputed GA: ...)"
+and \code{ga_imputed} is \code{TRUE}. \code{FALSE} drops them, as the main package.}
+
+\item{missing_ga_confirm_days}{[experimental] \code{c(before =, after =)}: the window around the birth date for the
+NPR/KUHR miscarriage codes (ICD-10 O02, O03; ICPC-2 W82) of a fetal death without gestational age and weight.
+Default \code{c(before = 28, after = 7)}.}
+
+\item{missing_ga_livebirth_days}{[experimental] Gestational age (days) given to MBRN single live births without
+gestational age when \code{missing_ga_impute = TRUE} (they are then kept). Default \code{280} (40+0 weeks, the median of live
+births).}
+
+\item{nonlive_codes}{[experimental] The non-live outcome codes of the report, see
+\code{\link[=uio_nonlive_codes]{uio_nonlive_codes()}}.}
 }
 \value{
 A \code{data.table}, one row per pregnancy:
@@ -91,6 +139,9 @@ A \code{data.table}, one row per pregnancy:
 \item{\code{preg_id}}{Pregnancy number (internal).}
 \item{\code{outcome_final}, \code{outcome_lable}}{1 Livebirth, 2 Miscarriage, 3 Termination of
 pregnancy (induced abortion), 4 Stillbirth, 5 Molar pregnancy, 6 Ectopic pregnancy.}
+\item{\code{outcome_lable_new}}{[experimental] The same outcome with new labels: Live birth, Late
+spontaneous abortion (a miscarriage decided by the MBRN, \code{MC_source} 1-4) or Spontaneous abortion
+(decided by NPR or KUHR), Termination of pregnancy, Stillbirth, Molar pregnancy, Ectopic pregnancy.}
 \item{\code{date_outcome}, \code{year_outcome}}{Date (and year) of the outcome: the MBRN birth date, or
 the first record of the event.}
 \item{\code{pr_start_final}}{Start of the pregnancy (day 0).}

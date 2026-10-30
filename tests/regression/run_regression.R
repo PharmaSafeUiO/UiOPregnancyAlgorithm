@@ -145,7 +145,7 @@ v13_cols <- c("outcome_final", "ID", "preg_id", "date_outcome", "MC_source", "TO
               "GA_event_days_final", "dating_method", "truncated_at_previous_outcome", "outcome_lable")
 strip <- function(x) {          # the columns of v1.3, in one order (2.0.0 adds the description of each pregnancy)
   x <- copy(x)[, intersect(v13_cols, names(x)), with = FALSE]
-  for (a in c("settings", "code_availability", "uio_capture")) setattr(x, a, NULL)
+  for (a in c("settings", "code_availability", "uio_capture", "missing_ga", "imputed_missing_ga")) setattr(x, a, NULL)
   setkey(x, NULL); setorder(x, outcome_final, ID, date_outcome, preg_id); x
 }
 same_dt <- function(a, b) {

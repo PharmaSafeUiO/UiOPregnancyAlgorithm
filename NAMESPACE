@@ -18,6 +18,7 @@ export(uio_project_sources)
 export(uio_mbrn_columns)
 export(uio_hospital_codes)
 export(uio_primary_care_codes)
+export(uio_nonlive_codes)
 
 importFrom(Rcpp, sourceCpp)
 importFrom(data.table, ":=", .GRP, .I, .N, .SD, as.data.table, as.IDate, copy, data.table, dcast,

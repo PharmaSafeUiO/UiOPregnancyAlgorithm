@@ -68,6 +68,39 @@ Each pregnancy has:
 | `MC_source`, `TOP_source` | registries that recorded a miscarriage / an induced abortion |
 | `mother_age` | the woman's age at the outcome |
 
+## MBRN records without gestational age (experimental)
+
+Version 1.3 and 2.0.0 drop MBRN records without gestational age (`SVLEN_DG` missing). With
+`missing_ga_impute = TRUE` (the default on this branch) they are kept. Before the algorithm runs, MBRN **single** births
+without gestational age get one:
+
+* The MBRN category decides; NPR/KUHR codes never make a termination:
+  * Induced abortion (`DODKAT` 10): **termination**, with the median gestational age of the MBRN terminations
+    with a recorded gestational age (at least 84 days).
+  * Live birth: **live birth**, with `missing_ga_livebirth_days` (280).
+  * Fetal death (`DODKAT` 7-9): weight 500 g or more: **stillbirth** (235 days); below 500 g: **late spontaneous
+    abortion** (the median gestational age of the MBRN late spontaneous abortions, 84-153 days); weight missing:
+    late spontaneous abortion if NPR/KUHR has a miscarriage code (ICD-10 O02, O03; ICPC-2 W82) from 28 days before
+    to 7 days after the birth date (`missing_ga_confirm_days`), otherwise stillbirth.
+* Not imputed (dropped, as in version 2.0.0) when the imputed start (birth date minus the imputed gestational age)
+  is less than 56 days after the woman's previous MBRN record, or for a live birth whose imputed gestational age is
+  below 154 days. The gestational age is never shortened.
+* The algorithm then runs unchanged on these records. `ga_imputed` marks them, `dating_method` says
+  "MBRN (imputed GA: ...)". `outcome_lable` keeps the labels of version 1.3 ("Livebirth", "Miscarriage", ...);
+  the new column `outcome_lable_new` says "Live birth" and separates late spontaneous abortions (MBRN) from
+  spontaneous abortions (NPR/KUHR). `attr(res, "imputed_missing_ga")` lists every record considered (codes, previous
+  MBRN record, not imputed; with the women's IDs: keep inside TSD).
+
+Multiple births without gestational age are dropped, as in version 2.0.0.
+
+**Report.** `run_uio_pa()` also describes the MBRN records without gestational age and the pregnancy that the
+algorithm finds for them in NPR and KUHR, and writes the answers to `output_dir/missing_ga/` as
+`missing_ga_report.md`, `missing_ga_report.html` and `missing_ga_report.docx`, with each table as a CSV file
+(counts of 1-4 shown as `<5`, `mask_below`).
+
+`missing_ga_impute = FALSE` drops them, as version 2.0.0. `missing_ga_report = FALSE` turns the report off.
+Test with known answers: `Rscript tests/missing_ga/test_missing_ga.R --lib=<library>`.
+
 ## Time conventions
 
 * The pregnancy start date is **day 0**. The gestational age at the outcome is

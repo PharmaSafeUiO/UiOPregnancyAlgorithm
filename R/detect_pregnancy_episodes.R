@@ -1,5 +1,12 @@
 # UiO pregnancy algorithm, version 2.0.0 (R package UiOPregnancyAlgorithm)
 #
+# The additions for MBRN records without gestational age are marked "[experimental]":
+# MBRN single births without gestational age are kept with an imputed gestational age (terminations and late
+# spontaneous abortions: the data median of their kind; stillbirths 235 days; live births 280 days; not imputed when
+# the start is less than 56 days after the woman's previous MBRN record), outcome_lable_new separates
+# late spontaneous abortions (MBRN) from spontaneous abortions (NPR/KUHR), and the MBRN records without
+# gestational age and the NPR/KUHR non-live records are kept for the missing-GA report (R/missing_ga.R).
+#
 # This file holds the algorithm function `detect_pregnancy_episodes()` copied verbatim from
 # version 1.3 (tests/regression/reference/UiO_preg_Algo_v1.3.R, lines 158-1510). The only edits are
 # marked "[v1.3.1]", "[v1.4.0]" and "[v2.0.0]"; uio_v13_settings() gives the settings of v1.3.
@@ -29,7 +36,10 @@
 #' @return A data.table, one row per pregnancy.
 #' @keywords internal
 #' @noRd
-detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_codes, years_range = NULL, settings = uio_default_settings()){
+detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_codes, years_range = NULL, settings = uio_default_settings(),
+                                     nonlive_codes = uio_nonlive_codes(),     # [experimental] nonlive_codes,
+                                     missing_ga_impute = TRUE, missing_ga_confirm_days = c(before = 28, after = 7),
+                                     missing_ga_livebirth_days = 280){   # [experimental]
 
   # settings (see uio_default_settings(); uio_v13_settings() reproduces v1.3)
   settings = .uio_resolve_settings(settings)
@@ -297,7 +307,8 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   }else{
     npr = fread("hospital_full.csv")
   }
-  npr = npr[code_rows(tilst, vocab, c("ICD-10" = npr_pattern))]   # [v2.0.0] memory, see code_rows()
+  npr = npr[code_rows(tilst, vocab, c("ICD-10" = paste(npr_pattern, nonlive_codes$icd10, sep = "|")))]   # [v2.0.0] memory, see code_rows();
+                                                                    # [experimental] also the non-live codes
 
 
   if(!file.exists("primary_care_full.csv")){
@@ -336,7 +347,8 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   }else{
     kuhr = fread("primary_care_full.csv")
   }
-  kuhr = kuhr[code_rows(diagnose, diagnosekodeverk, kuhr_pattern)]   # [v2.0.0] memory, see code_rows()
+  kuhr = kuhr[code_rows(diagnose, diagnosekodeverk, c("ICD-10" = paste(kuhr_pattern[["ICD-10"]], nonlive_codes$icd10, sep = "|"),
+                                                    "ICPC-2" = paste(kuhr_pattern[["ICPC-2"]], nonlive_codes$icpc2, sep = "|")))]   # [experimental]
 
   # [v2.0.0] Latin-1 text to UTF-8 (fix_encoding() above)
   npr[, tilst := fix_encoding(tilst)]
@@ -368,9 +380,105 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   # SVLEN = completed gestational weeks; keep records from min_year (MBRN: with mother ID and GA; KUHR: women)
   mbrn[,SVLEN:=floor(SVLEN_DG/7)]
 
+  # [experimental] MBRN records without gestational age (dropped on the next line, as in the algorithm),
+  # births in years_range, with the mother's ID
+  exp_mbrn_missing_ga = mbrn[year(DAGER_FDATO) >= min_year & year(DAGER_FDATO) <= max_year & !is.na(PasientLopeNr_MOR) & is.na(SVLEN_DG),
+                             intersect(c("PasientLopeNr_MOR", "DAGER_FDATO", "PLUREK", "DODKAT", "VEKT", "APGAR5"), names(mbrn)), with = FALSE]
+
+  # [experimental] MBRN single births without gestational age are kept, with SVLEN_DG set to the median gestational age of
+  # the MBRN records of their kind WITH a recorded gestational age (all years from min_year; live births and stillbirths:
+  # fixed, see below). The algorithm then runs unchanged. The MBRN category decides; NPR/KUHR codes can only switch a stillbirth to a late spontaneous abortion:
+  #   induced abortion (DODKAT 10): termination (no switch); median of the MBRN terminations, at least 84 days (else 119);
+  #   live birth (DODKAT 0-6, 11-12; 13 with a 5-minute Apgar score that is not 0 or blank, as in the algorithm): live birth
+  #   (no switch), with missing_ga_livebirth_days (280: the median of live births);
+  #   fetal death (DODKAT 7-9): weight >= stillbirth_min_weight_g: stillbirth; weight below it: late spontaneous abortion;
+  #   weight missing: late spontaneous abortion if NPR or KUHR has a miscarriage code (ICD-10 O02, O03; ICPC-2 W82) from
+  #   missing_ga_confirm_days["before"] days before to ["after"] days after the birth date, otherwise stillbirth.
+  #   Stillbirths get 235 days (fixed); late spontaneous abortions the median of the MBRN late spontaneous
+  #   abortions, from 84 days (MBRN registers from 12 weeks) to stillbirth_min_days - 1 (without such records 119).
+  # Not imputed (dropped, as before) when the imputed start (birth date - imputed GA) is less than 56 days (min_gap) after
+  # the woman's previous MBRN record (the latest MBRN birth date before this one, any record), or for a live birth whose
+  # imputed GA is below 154 days (lb_min, 22+0 weeks). The GA is never shortened.
+  # Multiple births (another MBRN record of the mother on the same date, or PLUREK > 1) and other DODKAT values keep the
+  # missing gestational age and are dropped as before.
+  exp_imputed = data.table(ID = character(0), dn = integer(0), kind = character(0), ga = numeric(0))
+  exp_medians = c(stillbirth = NA_real_, late_spontaneous_abortion = NA_real_, termination = NA_real_, live_birth = NA_real_)
+  if(isTRUE(missing_ga_impute)){
+    sb_impute_days = 235; min_gap = 56; lb_min = 154
+    sb_days = if(is.null(cfg_stillbirth_min_days)) 147 else cfg_stillbirth_min_days
+    wlim = if(use_weight) cfg_stillbirth_min_weight_g else Inf
+    wt_all = if(use_weight) suppressWarnings(as.numeric(mbrn$VEKT)) else rep(NA_real_, nrow(mbrn))
+    wt_all[!is.na(wt_all) & wt_all <= 0] = NA
+    in_years = !is.na(mbrn$PasientLopeNr_MOR) & !is.na(mbrn$DAGER_FDATO) & year(mbrn$DAGER_FDATO) >= min_year
+    fd = mbrn$DODKAT %in% 7:9 & in_years
+    rec = fd & !is.na(mbrn$SVLEN_DG)
+    rec_sb = rec & (mbrn$SVLEN_DG >= sb_days | (!is.na(wt_all) & wt_all >= wlim))
+    med = function(x, lo, hi, fallback){ x = x[!is.na(x)]; v = if(length(x)) round(stats::median(x)) else fallback; min(max(v, lo), hi) }
+    top = mbrn$DODKAT %in% 10 & in_years
+    exp_medians = c(stillbirth = sb_impute_days,
+                    late_spontaneous_abortion = med(mbrn$SVLEN_DG[rec & !rec_sb], 84, sb_days - 1, 119),
+                    termination = med(mbrn$SVLEN_DG[top & !is.na(mbrn$SVLEN_DG)], 84, Inf, 119),
+                    live_birth = as.numeric(missing_ga_livebirth_days))
+    key_md = paste(mbrn$PasientLopeNr_MOR, as.integer(mbrn$DAGER_FDATO))
+    single = !key_md %in% key_md[duplicated(key_md)] & (if("PLUREK" %in% names(mbrn)) is.na(mbrn$PLUREK) | mbrn$PLUREK <= 1 else TRUE)
+    ap = if("APGAR5" %in% names(mbrn)) trimws(as.character(mbrn$APGAR5)) else rep("", nrow(mbrn))
+    lb = (mbrn$DODKAT %in% c(0:6, 11:12) | (mbrn$DODKAT %in% 13 & !ap %in% c("0", ""))) & in_years
+    miss = is.na(mbrn$SVLEN_DG) & single
+    cand = data.table(i = c(which(fd & miss), which(top & miss), which(lb & miss)))
+    cand[, mbrn_kind := rep(c("fetal_death", "termination", "live_birth"), c(sum(fd & miss), sum(top & miss), sum(lb & miss)))]
+    if(nrow(cand)){
+      cand[, `:=`(ID = as.character(mbrn$PasientLopeNr_MOR[i]), dn = as.integer(mbrn$DAGER_FDATO[i]), w = wt_all[i])]
+      cand[, `:=`(lo = dn - as.integer(missing_ga_confirm_days[["before"]]), hi = dn + as.integer(missing_ga_confirm_days[["after"]]))]
+      in_window = function(codes) unique(codes[cand, on = .(ID, d >= lo, d <= hi), nomatch = 0L, .(i = i.i)]$i)
+      sa_codes = rbind(npr[vocab == "ICD-10" & grepl("O02|O03", tilst), .(ID = as.character(ID), d = as.integer(inndato))],
+                       kuhr[(diagnosekodeverk == "ICD-10" & grepl("O02|O03", diagnose)) |
+                              (diagnosekodeverk == "ICPC-2" & grepl("W82", diagnose, fixed = TRUE)), .(ID = as.character(ID), d = as.integer(ant_dager))])
+      ## termination codes (ICD-10 O04 in NPR or KUHR, ICPC-2 W83 in KUHR) in the same window: not used for the decision,
+      ## only listed (attr "imputed_missing_ga") to compare with the main package
+      top_codes = rbind(npr[vocab == "ICD-10" & grepl("O04", tilst, fixed = TRUE), .(ID = as.character(ID), d = as.integer(inndato))],
+                        kuhr[(diagnosekodeverk == "ICD-10" & grepl("O04", diagnose, fixed = TRUE)) |
+                               (diagnosekodeverk == "ICPC-2" & grepl("W83", diagnose, fixed = TRUE)), .(ID = as.character(ID), d = as.integer(ant_dager))])
+      cand[, `:=`(confirmed = i %in% in_window(sa_codes), termination_code = i %in% in_window(top_codes))]
+      cand[mbrn_kind != "fetal_death", `:=`(confirmed = NA, termination_code = NA)]
+      cand[, kind := data.table::fcase(mbrn_kind != "fetal_death", mbrn_kind,
+                                       !is.na(w) & w >= wlim, "stillbirth", !is.na(w), "late_spontaneous_abortion",
+                                       confirmed, "late_spontaneous_abortion", default = "stillbirth")]
+      cand[, ga := unname(exp_medians[kind])]
+
+      ## the woman's previous MBRN record (the latest birth date before this one)
+      births = unique(data.table(ID = as.character(mbrn$PasientLopeNr_MOR), d = as.integer(mbrn$DAGER_FDATO))[ID %in% unique(cand$ID) & !is.na(d)])
+      cand[, prev_key := dn - 1L]
+      cand[, prev_mbrn := births[cand, on = .(ID, d = prev_key), roll = Inf, x.d]]
+      cand[, too_close := !is.na(prev_mbrn) & dn - ga - prev_mbrn < min_gap]
+      cand[, imputed := !too_close & (kind != "live_birth" | ga >= lb_min)]
+
+      ok = cand[imputed == TRUE]
+      mbrn[ok$i, SVLEN_DG := if(is.integer(mbrn$SVLEN_DG)) as.integer(ok$ga) else as.numeric(ok$ga)]
+      mbrn[ok$i, SVLEN := floor(SVLEN_DG/7)]
+      exp_imputed = cand[, .(ID, dn, kind, ga, weight = w, confirmed, termination_code, prev_mbrn, too_close, imputed)]
+      n_k = function(k) sum(ok$kind == k)
+      cli::cli_alert_info(paste0("[experimental] MBRN single births without gestational age kept: ",
+                                 n_k("termination"), " termination(s) (GA ", exp_medians[["termination"]], " days), ",
+                                 n_k("stillbirth"), " stillbirth(s) (GA ", exp_medians[["stillbirth"]], " days), ",
+                                 n_k("late_spontaneous_abortion"), " late spontaneous abortion(s) (GA ", exp_medians[["late_spontaneous_abortion"]], " days), ",
+                                 n_k("live_birth"), " live birth(s) (GA ", exp_medians[["live_birth"]], " days); ",
+                                 sum(!cand$imputed), " not imputed (start less than ", min_gap,
+                                 " days after the previous MBRN record, or a live birth below ", lb_min, " days)."))
+    }
+  }
+
   mbrn <- mbrn[year(DAGER_FDATO) >= min_year & !is.na(PasientLopeNr_MOR) & !is.na(SVLEN_DG)]
   npr  <- npr[year(inndato) >= min_year]
   kuhr <- kuhr[year(ant_dager) >= min_year & kjonn==2]
+
+  # [experimental] NPR and KUHR (women) records with a non-live outcome code (uio_nonlive_codes()), before the
+  # code filter below
+  exp_nonlive = rbind(
+    npr[vocab == "ICD-10" & grepl(nonlive_codes$icd10, tilst, perl = TRUE),
+        .(ID = as.character(ID), source = "NPR", vocab, code = as.character(tilst), date = as.Date(inndato))],
+    kuhr[(diagnosekodeverk == "ICD-10" & grepl(nonlive_codes$icd10, diagnose, perl = TRUE)) |
+           (diagnosekodeverk == "ICPC-2" & grepl(nonlive_codes$icpc2, diagnose, perl = TRUE)),
+         .(ID = as.character(ID), source = "KUHR", vocab = diagnosekodeverk, code = as.character(diagnose), date = as.Date(ant_dager))])
 
   hospital_codes = as.data.table(hospital_codes)
   primary_care_codes = as.data.table(primary_care_codes)
@@ -383,7 +491,14 @@ detect_pregnancy_episodes = function(source_files, hospital_codes, primary_care_
   # [v2.0.0] the records used, kept for the description of the pregnancies and the code report (run_uio_pa())
   uio_capture = list(npr = npr[, .(ID, tilst, inndato)], kuhr = kuhr[, .(ID, diagnose, diagnosekodeverk, ant_dager)],
                      mbrn = mbrn[, intersect(c("PasientLopeNr_MOR", "DAGER_FDATO", "DODKAT", "SVLEN_DG", "MORS_ALDER", "VEKT"), names(mbrn)), with = FALSE],
-                     weight_used = use_weight)
+                     weight_used = use_weight,
+                     missing_ga = list(mbrn = exp_mbrn_missing_ga, nonlive = exp_nonlive,      # [experimental]
+                                       imputed = exp_imputed, medians = exp_medians))
+  # [experimental] the registered DODKAT in the records used for the description (codes_mbrn), not the 10 of an imputed termination
+  if("DODKAT_registered" %in% names(mbrn)){
+    uio_capture$mbrn[, DODKAT := mbrn$DODKAT_registered]
+    mbrn[, DODKAT_registered := NULL]
+  }
 
 
   # NPR stay: consecutive records of a woman with the same date; diagno numbers the diagnoses within a stay
@@ -1596,9 +1711,29 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
   ############################### (DONE) #################################
 
   outcome_lables = data.table(outcome_final = 1:6, outcome_lable= c("Livebirth", "Miscarriage", "Termination of pregnancy",
-                                                                    "Stillbirth", "Molar pregnancy", "Ectopic pregnancy"))
+                                                                    "Stillbirth", "Molar pregnancy", "Ectopic pregnancy"),
+                              # [experimental] outcome_lable_new: outcome_lable is kept as in v1.3; in outcome_lable_new a
+                              # miscarriage decided by the MBRN (MC_source 1-4) is a "Late spontaneous abortion", one decided by
+                              # NPR or KUHR a "Spontaneous abortion" (outcome_final stays 2 for both)
+                              outcome_lable_new = c("Live birth", "Spontaneous abortion", "Termination of pregnancy",
+                                                    "Stillbirth", "Molar pregnancy", "Ectopic pregnancy"))
 
   early_nonlive_births = merge(early_nonlive_births, outcome_lables, by = "outcome_final", all.x = TRUE)
+  early_nonlive_births[outcome_final == 2 & MC_source %in% 1:4, outcome_lable_new := "Late spontaneous abortion"]   # [experimental]
+
+  # [experimental] pregnancies of the MBRN records whose gestational age was imputed (see above)
+  early_nonlive_births[, ga_imputed := FALSE]
+  imp_used = if(nrow(exp_imputed) && "imputed" %in% names(exp_imputed)) exp_imputed[imputed == TRUE] else exp_imputed
+  if(nrow(imp_used)){
+    k = match(paste(as.integer(early_nonlive_births$ID), as.integer(as.Date(early_nonlive_births$date_outcome))),
+              paste(as.integer(imp_used$ID), imp_used$dn))
+    hit = !is.na(k) & early_nonlive_births$dating_method == "MBRN (recorded GA)"
+    early_nonlive_births[hit, `:=`(ga_imputed = TRUE,
+                                   dating_method = paste0("MBRN (imputed GA: ", c(stillbirth = "fixed for stillbirths",
+                                                                                  late_spontaneous_abortion = "median of late spontaneous abortions",
+                                                                                  termination = "median of terminations",
+                                                                                  live_birth = "median of live births")[imp_used$kind[k[hit]]], ")"))]
+  }
 
   uio_capture$extrapolated = extrapolated
   setattr(early_nonlive_births, "uio_capture", uio_capture)   # [v2.0.0] used and removed by run_uio_pa()
