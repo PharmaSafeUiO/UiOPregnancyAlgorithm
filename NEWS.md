@@ -6,8 +6,10 @@ MBRN records without gestational age (experimental; the additions are marked "[e
   `missing_ga_livebirth_days`): fetal deaths become a termination (NPR/KUHR ICD-10 O04, or KUHR ICPC-2 W83, from
   28 days before to 7 days after the birth date), a stillbirth or a late spontaneous abortion (birth weight;
   NPR/KUHR miscarriage codes when the weight is missing), with the median gestational age of their kind in the
-  MBRN; live births get 280 days. `ga_imputed` marks them; `outcome_lable` is "Late spontaneous abortion" for
-  a miscarriage decided by the MBRN and "Spontaneous abortion" for one decided by NPR/KUHR.
+  MBRN; live births get 280 days. `ga_imputed` marks them.
+* `outcome_lable` keeps the labels of version 1.3. The new column `outcome_lable_new` has the new labels: "Live
+  birth", "Late spontaneous abortion" for a miscarriage decided by the MBRN and "Spontaneous abortion" for one
+  decided by NPR/KUHR, and the other outcomes as in `outcome_lable`.
 * [may be dropped] `missing_ga_min_gap_days = 28`: an imputed start is not earlier than 28 days after the
   woman's previous outcome; `missing_ga_livebirth_min_days = 154`: a live birth left with less is not
   imputed. `attr(res, "imputed_missing_ga")` lists every record considered.

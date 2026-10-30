@@ -3,7 +3,7 @@
 # The additions for MBRN records without gestational age are marked "[experimental]":
 # MBRN single births without gestational age are kept with an imputed gestational age (the data median of
 # their kind: termination, stillbirth or late spontaneous abortion; live births 280 days; not earlier than
-# missing_ga_min_gap_days after the woman's previous outcome; missing_ga_impute), outcome_lable separates
+# missing_ga_min_gap_days after the woman's previous outcome; missing_ga_impute), outcome_lable_new separates
 # late spontaneous abortions (MBRN) from spontaneous abortions (NPR/KUHR), and the MBRN records without
 # gestational age and the NPR/KUHR non-live records are kept for the missing-GA report (R/missing_ga.R).
 #
@@ -1749,13 +1749,16 @@ void update_code_dates(DataFrame &early_nonlive_births, CharacterVector codes, s
   cli::cli_alert_info("Done")
   ############################### (DONE) #################################
 
-  # [experimental] outcome_lable: a miscarriage decided by the MBRN (MC_source 1-4) is a "Late spontaneous abortion",
-  # one decided by NPR or KUHR a "Spontaneous abortion" (outcome_final stays 2 for both)
-  outcome_lables = data.table(outcome_final = 1:6, outcome_lable= c("Live birth", "Spontaneous abortion", "Termination of pregnancy",
-                                                                    "Stillbirth", "Molar pregnancy", "Ectopic pregnancy"))
+  outcome_lables = data.table(outcome_final = 1:6, outcome_lable= c("Livebirth", "Miscarriage", "Termination of pregnancy",
+                                                                    "Stillbirth", "Molar pregnancy", "Ectopic pregnancy"),
+                              # [experimental] outcome_lable_new: outcome_lable is kept as in v1.3; in outcome_lable_new a
+                              # miscarriage decided by the MBRN (MC_source 1-4) is a "Late spontaneous abortion", one decided by
+                              # NPR or KUHR a "Spontaneous abortion" (outcome_final stays 2 for both)
+                              outcome_lable_new = c("Live birth", "Spontaneous abortion", "Termination of pregnancy",
+                                                    "Stillbirth", "Molar pregnancy", "Ectopic pregnancy"))
 
   early_nonlive_births = merge(early_nonlive_births, outcome_lables, by = "outcome_final", all.x = TRUE)
-  early_nonlive_births[outcome_final == 2 & MC_source %in% 1:4, outcome_lable := "Late spontaneous abortion"]
+  early_nonlive_births[outcome_final == 2 & MC_source %in% 1:4, outcome_lable_new := "Late spontaneous abortion"]   # [experimental]
 
   # [experimental] pregnancies of the MBRN records whose gestational age was imputed (see above)
   early_nonlive_births[, ga_imputed := FALSE]

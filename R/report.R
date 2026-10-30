@@ -101,7 +101,7 @@
   if (!"birth_year_est" %in% names(r)) r[, birth_year_est := NA_real_]
   r[, mother_age := data.table::fifelse(!is.na(age_mbrn), age_mbrn, round(year_outcome - birth_year_est))]
   r[, c("age_mbrn", "birth_year_est", "rid", "dout", "dstart") := NULL]
-  data.table::setcolorder(r, c("ID", "preg_id", "outcome_final", "outcome_lable", "date_outcome", "year_outcome", "pr_start_final",
+  data.table::setcolorder(r, c("ID", "preg_id", "outcome_final", "outcome_lable", "outcome_lable_new", "date_outcome", "year_outcome", "pr_start_final",
                                "GA_event_days_final", "GA_event_week_final", "dating_class", "dating_method", "dating_source", "dating_code",
                                "truncated_at_previous_outcome", "outcome_source", "outcome_code", "codes_mbrn", "codes_npr", "codes_kuhr",
                                "MC_source", "TOP_source", "mother_age"))

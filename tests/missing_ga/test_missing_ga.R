@@ -141,7 +141,7 @@ fd_dates <- data.table(ID = c(20L, 21L, 22L, 23L, 27L, 29L, 31L, 33L),
                               "stillbirths", "terminations", "stillbirths", "stillbirths, start 28 d after the previous outcome"))
 got <- P[fd_dates, on = .(ID, date_outcome = d), nomatch = NA]
 check("imputation: W20 (400 g), W23 (350 g) late spontaneous abortions; W21 (800 g, NPR O049 the same day) and W29 (weight 0 = missing, KUHR W83 10 days before) terminations; W22 (no weight, no code), W27 (600 g), W31 (700 g) stillbirths; W33 (no weight, no code in the window) a stillbirth by the rule, a late spontaneous abortion after its start was moved (72 days)",
-      identical(got$outcome_lable, fd_dates$kind) && all(got$outcome_source == "MBRN"))
+      identical(got$outcome_lable_new, fd_dates$kind) && all(got$outcome_source == "MBRN"))
 check("imputation: GA = data median (late spontaneous abortions 120 days, stillbirths 154 days: the median 150 of the synthetic stillbirths raised to 154, terminations 119 days: no MBRN termination with GA, fallback), but W23 and W33 72 days (start 28 days after the previous outcome); dating_method and ga_imputed say so",
       identical(as.numeric(got$GA_event_days_final), fd_dates$ga) && all(got$ga_imputed) &&
         identical(got$dating_method, paste0("MBRN (imputed GA: median of ", fd_dates$dm, ")")) &&
@@ -157,10 +157,10 @@ check("live births: W34 imputed with 154 days (start 28 days after its previous 
       { w34 <- P[ID == 34L & date_outcome == as.Date("2018-06-01")]
         nrow(w34) == 1L && w34$GA_event_days_final == 154 && w34$ga_imputed && !IM[ID == "32", imputed] && IM[ID == "32", ga] == 92 &&
           nrow(P[ID == 32L & date_outcome == as.Date("2016-01-15")]) == 0L &&
-          P[ID == 32L & date_outcome == as.Date("2015-09-17"), outcome_lable] == "Spontaneous abortion" })
+          P[ID == 32L & date_outcome == as.Date("2015-09-17"), outcome_lable_new] == "Spontaneous abortion" })
 check("the earlier outcomes are kept as their own pregnancies once the start is moved: W23's O039 (2018-10-25) and W33's O039 (2016-11-23) are spontaneous abortions",
-      P[ID == 23L & date_outcome == as.Date("2018-10-25"), outcome_lable] == "Spontaneous abortion" &&
-        P[ID == 33L & date_outcome == as.Date("2016-11-23"), outcome_lable] == "Spontaneous abortion")
+      P[ID == 23L & date_outcome == as.Date("2018-10-25"), outcome_lable_new] == "Spontaneous abortion" &&
+        P[ID == 33L & date_outcome == as.Date("2016-11-23"), outcome_lable_new] == "Spontaneous abortion")
 check("missing_ga_min_gap_days = 0: W23's start is the previous outcome date (100 days)",
       { r <- as.data.table(run_uio_pa(workdir = wd, source_files = src, years_range = c(2008, 2023), output_dir = NULL, verbose = FALSE,
                                       missing_ga_report = FALSE, missing_ga_min_gap_days = 0))
@@ -171,13 +171,17 @@ check("O04 rule: W21's termination is the MBRN pregnancy (TOP_source MBRN+NPR, o
 check("no double counting: one pregnancy of the algorithm within 55 days of each of these birth dates (the NPR/KUHR codes around them belong to the MBRN pregnancy)",
       all(U[ID %in% as.character(fd_dates$ID) & group == "SB", n_candidates] == 1L))
 check("the twin W28 (fetal death without GA) is not imputed; the pregnancy outside years_range (W30, 2024) is kept by the algorithm as MBRN births after the last year are",
-      !any(P[ID == 28L, ga_imputed]) && P[ID == 30L, outcome_lable] == "Stillbirth")
-check("outcome_lable: NPR/KUHR miscarriages are 'Spontaneous abortion', MBRN ones 'Late spontaneous abortion'; outcome_final stays 2 for both",
-      all(P[outcome_final == 2 & MC_source %in% 5:7, outcome_lable] == "Spontaneous abortion") &&
-        all(P[outcome_final == 2 & MC_source %in% 1:4, outcome_lable] == "Late spontaneous abortion") &&
-        nrow(P[outcome_final == 2 & MC_source %in% 5:7]) > 0 && setequal(unique(P$outcome_lable[!is.na(P$outcome_lable)]),
+      !any(P[ID == 28L, ga_imputed]) && P[ID == 30L, outcome_lable_new] == "Stillbirth")
+check("outcome_lable_new: NPR/KUHR miscarriages are 'Spontaneous abortion', MBRN ones 'Late spontaneous abortion'; outcome_final stays 2 for both",
+      all(P[outcome_final == 2 & MC_source %in% 5:7, outcome_lable_new] == "Spontaneous abortion") &&
+        all(P[outcome_final == 2 & MC_source %in% 1:4, outcome_lable_new] == "Late spontaneous abortion") &&
+        nrow(P[outcome_final == 2 & MC_source %in% 5:7]) > 0 && setequal(unique(P$outcome_lable_new[!is.na(P$outcome_lable_new)]),
         c("Live birth", "Spontaneous abortion", "Late spontaneous abortion", "Termination of pregnancy", "Stillbirth", "Molar pregnancy", "Ectopic pregnancy")[
-          c("Live birth", "Spontaneous abortion", "Late spontaneous abortion", "Termination of pregnancy", "Stillbirth", "Molar pregnancy", "Ectopic pregnancy") %in% P$outcome_lable]))
+          c("Live birth", "Spontaneous abortion", "Late spontaneous abortion", "Termination of pregnancy", "Stillbirth", "Molar pregnancy", "Ectopic pregnancy") %in% P$outcome_lable_new]))
+check("outcome_lable keeps the v1.3 labels of outcome_final (1 Livebirth, 2 Miscarriage, ...) and comes right before outcome_lable_new",
+      identical(P$outcome_lable, c("Livebirth", "Miscarriage", "Termination of pregnancy", "Stillbirth", "Molar pregnancy",
+                                   "Ectopic pregnancy")[P$outcome_final]) &&
+        match("outcome_lable_new", names(P)) == match("outcome_lable", names(P)) + 1L)
 check("live births without GA: W24 (DODKAT 0) and W25 (DODKAT 13, Apgar 8) kept as live births with 280 days; W26 (DODKAT 13, Apgar 0) not",
       { lb <- P[ID %in% c(24L, 25L)]
         nrow(lb) == 2L && all(lb$outcome_final == 1L) && all(lb$GA_event_days_final == 280) && all(lb$ga_imputed) &&

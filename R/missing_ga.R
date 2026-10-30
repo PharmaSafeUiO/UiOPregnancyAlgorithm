@@ -124,7 +124,7 @@ uio_nonlive_codes <- function() list(icd10 = "^O0[0-8]", icpc2 = "^W8[23]")
                                     outcome_conf != "No outcome code", "Outcome only", dating == lab_mk, "Start only", default = "Neither")]
 
   # C. for comparison: the pregnancy that the current algorithm built (same window; the closest one)
-  p <- out[, .(ID = as.character(ID), dout = as.integer(date_outcome), outcome_final, outcome = outcome_lable,
+  p <- out[, .(ID = as.character(ID), dout = as.integer(date_outcome), outcome_final, outcome = outcome_lable_new,
                outcome_source, outcome_code, dating_method, GA = GA_event_days_final)]
   p[is.na(outcome), outcome := "(no outcome: multiple birth not listed, or unknown DODKAT)"]
   cand <- p[u, on = .(ID, dout >= lo, dout <= hi), nomatch = 0L,
@@ -768,4 +768,4 @@ utils::globalVariables(c("DAGER_FDATO", "group", "wt", "wt_max", "weight_class",
                          "i.code", "i.msource", "i.implied", "i.outcome_source", "i.outcome_final", "i.outcome", "i.dating_method", "i.GA",
                          "i.n_candidates", "types", "oc_npr", "oc_kuhr", "oc_first", "outcome_conf", "oc_source", "type", "dn", "use",
                          "implied", "prio", "msource", "marker_any", "marker_code", "marker_source", "ga_marker", "ga_rejected", "dating",
-                         "captured", "decided_by", "n_candidates", "dating_alg", "GA", "diff", "dout", "date", "n_records", "days", "confirmed", "kind", "ga", "w", "i.i", "ga_imputed", "o04", "DODKAT_registered", "o04_npr", "o04_kuhr", "w83", "fdeath", "ga_median", "kind_rule", "prev_outcome", "prev_key", "capped", "imputed", "blo", "bhi", "x.d", "i.d", "first", "row", "basis", "main", "i.lab", "x.lab", "i.row", "i.dn"))
+                         "captured", "decided_by", "n_candidates", "dating_alg", "GA", "diff", "dout", "date", "n_records", "days", "confirmed", "kind", "ga", "w", "i.i", "ga_imputed", "o04", "DODKAT_registered", "o04_npr", "o04_kuhr", "w83", "fdeath", "ga_median", "kind_rule", "prev_outcome", "prev_key", "capped", "imputed", "blo", "bhi", "x.d", "i.d", "first", "row", "basis", "main", "i.lab", "x.lab", "i.row", "i.dn", "outcome_lable_new"))

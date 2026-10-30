@@ -88,8 +88,9 @@ without gestational age get one:
   live birth left with less than `missing_ga_livebirth_min_days` (154) days is not imputed, and a stillbirth
   without weight shortened below 154 days becomes a late spontaneous abortion.
 * The algorithm then runs unchanged on these records. `ga_imputed` marks them, `dating_method` says
-  "MBRN (imputed GA: ...)", and `outcome_lable` separates late spontaneous abortions (MBRN) from spontaneous
-  abortions (NPR/KUHR). `attr(res, "imputed_missing_ga")` lists every record considered (codes, previous
+  "MBRN (imputed GA: ...)". `outcome_lable` keeps the labels of version 1.3 ("Livebirth", "Miscarriage", ...);
+  the new column `outcome_lable_new` says "Live birth" and separates late spontaneous abortions (MBRN) from
+  spontaneous abortions (NPR/KUHR). `attr(res, "imputed_missing_ga")` lists every record considered (codes, previous
   outcome, start moved, not imputed; with the women's IDs: keep inside TSD).
 
 Multiple births and induced abortions without gestational age are dropped, as in version 2.0.0.

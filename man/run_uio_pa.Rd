@@ -148,6 +148,9 @@ A \code{data.table}, one row per pregnancy:
 \item{\code{preg_id}}{Pregnancy number (internal).}
 \item{\code{outcome_final}, \code{outcome_lable}}{1 Livebirth, 2 Miscarriage, 3 Termination of
 pregnancy (induced abortion), 4 Stillbirth, 5 Molar pregnancy, 6 Ectopic pregnancy.}
+\item{\code{outcome_lable_new}}{[experimental] The same outcome with new labels: Live birth, Late
+spontaneous abortion (a miscarriage decided by the MBRN, \code{MC_source} 1-4) or Spontaneous abortion
+(decided by NPR or KUHR), Termination of pregnancy, Stillbirth, Molar pregnancy, Ectopic pregnancy.}
 \item{\code{date_outcome}, \code{year_outcome}}{Date (and year) of the outcome: the MBRN birth date, or
 the first record of the event.}
 \item{\code{pr_start_final}}{Start of the pregnancy (day 0).}
