@@ -26,7 +26,17 @@ run_uio_pa(
   output_dir = file.path(workdir, "output"),
   report = TRUE,
   mask_below = 5,
-  verbose = TRUE
+  verbose = TRUE,
+  missing_ga_report = TRUE,
+  missing_ga_outcome_days = c(before = 55, after = 55),
+  missing_ga_marker_days = NULL,
+  missing_ga_reject_days = NULL,
+  missing_ga_impute = TRUE,
+  missing_ga_confirm_days = c(before = 28, after = 7),
+  missing_ga_livebirth_days = 280,
+  missing_ga_min_gap_days = 28,
+  missing_ga_livebirth_min_days = 154,
+  nonlive_codes = uio_nonlive_codes()
 )
 }
 \arguments{
@@ -83,6 +93,53 @@ matching. Default \code{TRUE}.}
 as \code{"<5"} (default \code{5}), so that they can be exported from TSD. \code{0} shows all counts.}
 
 \item{verbose}{Print the summary at the end of the run. Default \code{TRUE}.}
+
+\item{missing_ga_report}{[experimental] Describe the MBRN records without gestational age (which
+the algorithm drops): the NPR/KUHR outcome codes around the birth date (does NPR/KUHR confirm the
+outcome?), the pregnancy markers before it (can the start be estimated?), and the pregnancy that the
+current algorithm builds, for fetal deaths by birth weight and for live births. The report is
+written to \code{output_dir/missing_ga} as \code{missing_ga_report.md}, \code{.html} and \code{.docx}, with the tables as
+CSV files (counts masked with \code{mask_below}), and attached to the result as \code{attr(result, "missing_ga")}
+(unmasked, with the women's IDs: keep it inside TSD). Default \code{TRUE}.}
+
+\item{missing_ga_outcome_days}{[experimental] \code{c(before =, after =)}: outcome codes (and the pregnancy
+of the current algorithm) are searched from \code{before} days before to \code{after} days after the MBRN birth
+date. Default \code{c(before = 55, after = 55)} (\code{same_event_days - 1}: the algorithm's same-event window).}
+
+\item{missing_ga_marker_days, missing_ga_reject_days}{[experimental] Pregnancy markers are searched from
+\code{missing_ga_marker_days} days before the birth date up to it, and a marker that implies
+\code{missing_ga_reject_days} days or more is rejected. \code{NULL} (default): the run's \code{marker_lookback_days}
+and \code{marker_rejection_days} (70 and 119), as in the algorithm.}
+
+\item{missing_ga_impute}{[experimental] If \code{TRUE} (default), MBRN single births with a fetal death
+(\code{DODKAT} 7-9) and without gestational age are kept: each is decided as a termination (an NPR/KUHR O04 code or a
+KUHR W83 code around the birth date, whatever the weight), a stillbirth (weight at least \code{stillbirth_min_weight_g}; or weight missing and
+no NPR/KUHR miscarriage code around the birth date) or a late spontaneous abortion (weight below the limit; or weight
+missing and such a code), and gets the median gestational age of the MBRN records of that kind (terminations:
+DODKAT 10) with a recorded gestational age. MBRN single live
+births without gestational age are kept with \code{missing_ga_livebirth_days}. \code{dating_method} then says
+"MBRN (imputed GA: ...)" and \code{ga_imputed} is \code{TRUE}. \code{FALSE} drops them, as the main package.}
+
+\item{missing_ga_confirm_days}{[experimental] \code{c(before =, after =)}: the window around the birth date for the
+NPR/KUHR codes of a fetal death without gestational age: ICD-10 O04 or ICPC-2 W83 (termination), and ICD-10 O02, O03
+or ICPC-2 W82 (late spontaneous abortion when the weight is missing). Default \code{c(before = 28, after = 7)}. Records in
+the \code{before} days are this pregnancy's own codes, not a previous outcome (\code{missing_ga_min_gap_days}).}
+
+\item{missing_ga_livebirth_days}{[experimental] Gestational age (days) given to MBRN single live births without
+gestational age when \code{missing_ga_impute = TRUE} (they are then kept). Default \code{280} (40+0 weeks, the median of live
+births).}
+
+\item{missing_ga_min_gap_days}{[experimental, may be dropped] The start of an imputed pregnancy is not earlier than
+this many days after the woman's previous outcome (an MBRN birth, or an NPR/KUHR outcome code of the algorithm, dated
+as the algorithm dates repeated records, more than \code{missing_ga_confirm_days["before"]} days before the birth date);
+otherwise its gestational age is shortened. Default \code{28}. The rest of the algorithm only moves a start to the previous
+outcome date.}
+
+\item{missing_ga_livebirth_min_days}{[experimental, may be dropped] A live birth whose gestational age is shortened
+below this (by \code{missing_ga_min_gap_days}) is not imputed (dropped, as in the main package). Default \code{154} (22+0 weeks).}
+
+\item{nonlive_codes}{[experimental] The non-live outcome codes of the report, see
+\code{\link[=uio_nonlive_codes]{uio_nonlive_codes()}}.}
 }
 \value{
 A \code{data.table}, one row per pregnancy:

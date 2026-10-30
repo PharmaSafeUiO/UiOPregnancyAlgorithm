@@ -100,6 +100,44 @@
 #' @param mask_below In the CSV files and the report, counts from 1 to `mask_below - 1` are shown
 #'   as `"<5"` (default `5`), so that they can be exported from TSD. `0` shows all counts.
 #' @param verbose Print the summary at the end of the run. Default `TRUE`.
+#' @param missing_ga_report \[experimental\] Describe the MBRN records without gestational age (which
+#'   the algorithm drops): the NPR/KUHR outcome codes around the birth date (does NPR/KUHR confirm the
+#'   outcome?), the pregnancy markers before it (can the start be estimated?), and the pregnancy that the
+#'   current algorithm builds, for fetal deaths by birth weight and for live births. The report is
+#'   written to `output_dir/missing_ga` as `missing_ga_report.md`, `.html` and `.docx`, with the tables as
+#'   CSV files (counts masked with `mask_below`), and attached to the result as `attr(result, "missing_ga")`
+#'   (unmasked, with the women's IDs: keep it inside TSD). Default `TRUE`.
+#' @param missing_ga_outcome_days \[experimental\] `c(before =, after =)`: outcome codes (and the pregnancy
+#'   of the current algorithm) are searched from `before` days before to `after` days after the MBRN birth
+#'   date. Default `c(before = 55, after = 55)` (`same_event_days - 1`: the algorithm's same-event window).
+#' @param missing_ga_marker_days,missing_ga_reject_days \[experimental\] Pregnancy markers are searched from
+#'   `missing_ga_marker_days` days before the birth date up to it, and a marker that implies
+#'   `missing_ga_reject_days` days or more is rejected. `NULL` (default): the run's `marker_lookback_days`
+#'   and `marker_rejection_days` (70 and 119), as in the algorithm.
+#' @param missing_ga_impute \[experimental\] If `TRUE` (default), MBRN single births with a fetal death
+#'   (`DODKAT` 7-9) and without gestational age are kept: each is decided as a termination (an NPR/KUHR O04 code or a
+#'   KUHR W83 code around the birth date, whatever the weight), a stillbirth (weight at least `stillbirth_min_weight_g`; or weight missing and
+#'   no NPR/KUHR miscarriage code around the birth date) or a late spontaneous abortion (weight below the limit; or weight
+#'   missing and such a code), and gets the median gestational age of the MBRN records of that kind (terminations:
+#'   DODKAT 10) with a recorded gestational age. MBRN single live
+#'   births without gestational age are kept with `missing_ga_livebirth_days`. `dating_method` then says
+#'   "MBRN (imputed GA: ...)" and `ga_imputed` is `TRUE`. `FALSE` drops them, as the main package.
+#' @param missing_ga_confirm_days \[experimental\] `c(before =, after =)`: the window around the birth date for the
+#'   NPR/KUHR codes of a fetal death without gestational age: ICD-10 O04 or ICPC-2 W83 (termination), and ICD-10 O02, O03
+#'   or ICPC-2 W82 (late spontaneous abortion when the weight is missing). Default `c(before = 28, after = 7)`. Records in
+#'   the `before` days are this pregnancy's own codes, not a previous outcome (`missing_ga_min_gap_days`).
+#' @param missing_ga_livebirth_days \[experimental\] Gestational age (days) given to MBRN single live births without
+#'   gestational age when `missing_ga_impute = TRUE` (they are then kept). Default `280` (40+0 weeks, the median of live
+#'   births).
+#' @param missing_ga_min_gap_days \[experimental, may be dropped\] The start of an imputed pregnancy is not earlier than
+#'   this many days after the woman's previous outcome (an MBRN birth, or an NPR/KUHR outcome code of the algorithm, dated
+#'   as the algorithm dates repeated records, more than `missing_ga_confirm_days["before"]` days before the birth date);
+#'   otherwise its gestational age is shortened. Default `28`. The rest of the algorithm only moves a start to the previous
+#'   outcome date.
+#' @param missing_ga_livebirth_min_days \[experimental, may be dropped\] A live birth whose gestational age is shortened
+#'   below this (by `missing_ga_min_gap_days`) is not imputed (dropped, as in the main package). Default `154` (22+0 weeks).
+#' @param nonlive_codes \[experimental\] The non-live outcome codes of the report, see
+#'   [uio_nonlive_codes()].
 #'
 #' @section Summary and output folder:
 #' At the end of the run the summary is printed: the availability of the codes in NPR and KUHR
@@ -187,7 +225,17 @@ run_uio_pa <- function(workdir,
                        output_dir = file.path(workdir, "output"),
                        report = TRUE,
                        mask_below = 5,
-                       verbose = TRUE) {
+                       verbose = TRUE,
+                       missing_ga_report = TRUE,
+                       missing_ga_outcome_days = c(before = 55, after = 55),
+                       missing_ga_marker_days = NULL,
+                       missing_ga_reject_days = NULL,
+                       missing_ga_impute = TRUE,
+                       missing_ga_confirm_days = c(before = 28, after = 7),
+                       missing_ga_livebirth_days = 280,
+                       missing_ga_min_gap_days = 28,
+                       missing_ga_livebirth_min_days = 154,
+                       nonlive_codes = uio_nonlive_codes()) {
   if (missing(workdir) || !is.character(workdir) || length(workdir) != 1L || !dir.exists(workdir))
     stop("`workdir` must be an existing folder.", call. = FALSE)
   if (missing(source_files))
@@ -209,12 +257,37 @@ run_uio_pa <- function(workdir,
 
   source_files <- uio_prepare_sources(source_files)
   res <- detect_pregnancy_episodes(source_files, hospital_codes, primary_care_codes,
-                                   years_range = years_range, settings = settings)
+                                   years_range = years_range, settings = settings, nonlive_codes = nonlive_codes,
+                                   missing_ga_impute = missing_ga_impute, missing_ga_confirm_days = missing_ga_confirm_days,
+                                   missing_ga_livebirth_days = missing_ga_livebirth_days,
+                                   missing_ga_min_gap_days = missing_ga_min_gap_days,
+                                   missing_ga_livebirth_min_days = missing_ga_livebirth_min_days)
   cap <- attr(res, "uio_capture")
   notes <- character(0)
   if (!is.null(settings$stillbirth_min_weight_g) && !isTRUE(cap$weight_used))
     notes <- c(notes, "Birth weight not mapped: stillbirth decided by gestational age only.")
   notes <- c(notes, .uio_extrapolation_notes(cap$extrapolated))
+  imp_all <- cap$missing_ga$imputed   # [experimental]
+  imp <- if (!is.null(imp_all) && "imputed" %in% names(imp_all)) imp_all[imputed == TRUE] else imp_all
+  if (!is.null(imp) && nrow(imp)) {
+    mkn <- function(x) .uio_mask(x, max(mask_below, 1))
+    top <- imp[kind == "termination"]
+    notes <- c(notes, paste0("[experimental] MBRN single births without gestational age kept with an imputed gestational age: ",
+                             mkn(nrow(top)), " terminations (NPR O04 only ", mkn(sum(top$o04_npr & !top$o04_kuhr & !top$w83)),
+                             ", KUHR W83 only ", mkn(sum(top$w83 & !top$o04_npr & !top$o04_kuhr)), ", KUHR O04 only ",
+                             mkn(sum(top$o04_kuhr & !top$o04_npr & !top$w83)), ", more than one of these ",
+                             mkn(sum((top$o04_npr + top$o04_kuhr + top$w83) > 1)), "; ", cap$missing_ga$medians[["termination"]],
+                             " days, the median of the MBRN terminations with a recorded gestational age), ",
+                             mkn(sum(imp$kind == "stillbirth")), " stillbirths (", cap$missing_ga$medians[["stillbirth"]],
+                             " days, the median of the MBRN stillbirths with a recorded gestational age) and ",
+                             mkn(sum(imp$kind == "late_spontaneous_abortion")), " late spontaneous abortions (", cap$missing_ga$medians[["late_spontaneous_abortion"]],
+                             " days, the median of the MBRN late spontaneous abortions with a recorded gestational age)",
+                             if (any(imp$kind == "live_birth")) paste0("; MBRN single live births without gestational age: ",
+                                                                       mkn(sum(imp$kind == "live_birth")), " (", cap$missing_ga$medians[["live_birth"]], " days)") else "", ". ",
+                             "Start not earlier than ", missing_ga_min_gap_days, " days after the woman's previous outcome: ", mkn(sum(imp$capped)),
+                             " starts moved; ", mkn(sum(!imp_all$imputed)), " records not imputed because the gestational age left was too short (live births below ",
+                             missing_ga_livebirth_min_days, " days)."))
+  }
   out <- .uio_describe(res, cap, settings, hospital_codes, primary_care_codes)
   # pregnancies without an outcome (kept, as in v1.3): MBRN multiple births whose combination of child outcomes is not
   # one of those the algorithm lists (e.g. a triplet with two live births and a miscarriage; quadruplets other than
@@ -228,6 +301,11 @@ run_uio_pa <- function(workdir,
     cli::cli_alert_warning("{n_na} pregnanc{?y has/ies have} no outcome (MBRN multiple birth with a combination of outcomes the algorithm does not list, or an unknown DODKAT): kept with outcome_final NA, not in the tables. See res[is.na(outcome_final)].")
   }
   avail <- .uio_code_availability(cap, settings, hospital_codes, primary_care_codes)
+  # [experimental] MBRN records without gestational age
+  mg <- if (isTRUE(missing_ga_report))
+    .uio_missing_ga(out, cap, settings, hospital_codes, primary_care_codes, outcome_days = missing_ga_outcome_days,
+                    marker_days = missing_ga_marker_days, reject_days = missing_ga_reject_days,
+                    nonlive_codes = nonlive_codes, years_range = years_range)
   rm(res, cap)
   setattr(out, "settings", settings)
   setattr(out, "code_availability", avail)
@@ -243,7 +321,15 @@ run_uio_pa <- function(workdir,
     if (isTRUE(report)) .uio_html_report(out, avail, settings, notes, file.path(output_dir, "uio_report.html"), mask = max(mask_below, 1))
     data.table::setindex(out, NULL)     # indices that data.table adds when the report filters the table
     saveRDS(out, file.path(output_dir, "uio_pregnancies.rds"))
+    if (!is.null(mg)) {
+      mg_dir <- .uio_missing_ga_write(mg, settings, output_dir, mask_below)
+      if (isTRUE(verbose)) cli::cli_alert_success("Missing-GA report in {mg_dir}")
+    }
   }
+  if (!is.null(mg)) setattr(out, "missing_ga", mg)
+  # [experimental] every MBRN single birth without gestational age that was considered for imputation (with the women's IDs:
+  # keep inside TSD): the decision, the codes, the previous outcome and whether the start was moved or the record not imputed
+  if (!is.null(imp_all) && nrow(imp_all)) setattr(out, "imputed_missing_ga", imp_all)
   if (isTRUE(verbose)) {
     .uio_print_summary(out, avail, settings, notes)
     if (!is.null(output_dir)) cli::cli_alert_success("Results in {output_dir}")

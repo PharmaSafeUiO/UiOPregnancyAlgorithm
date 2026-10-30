@@ -59,7 +59,9 @@ runs$e2 <- rp(workdir = p$workdir, source_files = src, years_range = c(2008, 202
 out_dir <- file.path(dirname(p$workdir), "output_o")
 runs$o <- run_uio_pa(workdir = p$workdir, source_files = src, years_range = c(2008, 2023), output_dir = out_dir)
 out_files <- list.files(out_dir)
-out_rds_equal <- isTRUE(all.equal(readRDS(file.path(out_dir, "uio_pregnancies.rds")), runs$o))
+# [experimental] the rds is written before the attributes "missing_ga" and "imputed_missing_ga" are attached
+o_cmp <- data.table::copy(runs$o); for (a in c("missing_ga", "imputed_missing_ga")) data.table::setattr(o_cmp, a, NULL)
+out_rds_equal <- isTRUE(all.equal(readRDS(file.path(out_dir, "uio_pregnancies.rds")), o_cmp))
 outcomes_csv <- data.table::fread(file.path(out_dir, "uio_outcomes.csv"), colClasses = "character")
 avail_csv <- data.table::fread(file.path(out_dir, "uio_code_availability.csv"), colClasses = "character")
 html <- readLines(file.path(out_dir, "uio_report.html"), warn = FALSE, encoding = "UTF-8")

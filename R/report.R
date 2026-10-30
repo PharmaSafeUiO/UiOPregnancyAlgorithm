@@ -24,7 +24,7 @@
   outc <- "O00|O01|O02|O03|O04|O35"
 
   # source that decided the outcome (MBRN > NPR > KUHR; KUHR adds miscarriages only)
-  r[, outcome_source := data.table::fcase(dating_method == "MBRN (recorded GA)", "MBRN",
+  r[, outcome_source := data.table::fcase(startsWith(dating_method, "MBRN ("), "MBRN",   # [experimental] also "MBRN (imputed GA ...)"
                                           outcome_final %in% c(3, 5, 6), "NPR",
                                           MC_source %in% 7L, "KUHR",
                                           default = "NPR")]
@@ -91,6 +91,7 @@
     }
   }
   r[dating_method == "MBRN (recorded GA)", dating_source := "MBRN"]
+  r[startsWith(dating_method, "MBRN (imputed"), dating_source := "MBRN median"]   # [experimental]
   r[is.na(dating_source) & dating_class == "fixed", dating_source := "default"]
 
   # age of the woman: MBRN age at this birth; otherwise from her birth year estimated from her MBRN records

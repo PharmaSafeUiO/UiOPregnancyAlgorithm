@@ -1,3 +1,20 @@
+# UiOPregnancyAlgorithm 2.0.0, branch impute-missing-GA-in-MBRN
+
+MBRN records without gestational age (experimental; the additions are marked "[experimental]" in the code).
+
+* MBRN single births without gestational age are kept (`missing_ga_impute = TRUE`, `missing_ga_confirm_days`,
+  `missing_ga_livebirth_days`): fetal deaths become a termination (NPR/KUHR ICD-10 O04, or KUHR ICPC-2 W83, from
+  28 days before to 7 days after the birth date), a stillbirth or a late spontaneous abortion (birth weight;
+  NPR/KUHR miscarriage codes when the weight is missing), with the median gestational age of their kind in the
+  MBRN; live births get 280 days. `ga_imputed` marks them; `outcome_lable` is "Late spontaneous abortion" for
+  a miscarriage decided by the MBRN and "Spontaneous abortion" for one decided by NPR/KUHR.
+* [may be dropped] `missing_ga_min_gap_days = 28`: an imputed start is not earlier than 28 days after the
+  woman's previous outcome; `missing_ga_livebirth_min_days = 154`: a live birth left with less is not
+  imputed. `attr(res, "imputed_missing_ga")` lists every record considered.
+* `run_uio_pa()` writes a report on the MBRN records without gestational age (`missing_ga_report`,
+  `missing_ga_outcome_days`, `missing_ga_marker_days`, `missing_ga_reject_days`, `nonlive_codes`;
+  `uio_nonlive_codes()`) as Markdown, HTML and Word, with the tables as CSV files.
+
 # UiOPregnancyAlgorithm 2.0.0
 
 The version used in the comparison of four pregnancy algorithms (Nordeng, Hayati, van Gelder).

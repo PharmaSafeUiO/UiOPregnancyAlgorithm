@@ -16,6 +16,8 @@ Description: Identifies pregnancies, their outcomes (live birth, stillbirth, mis
     M. M. H. J. van Gelder. Its rules (stillbirth limit and birth weight, the marker rule, the
     look-back for pregnancy markers, the gap that separates events, the default pregnancy
     lengths) are arguments, and the settings of version 1.3 can be restored.
+    Experimental: MBRN single births without gestational age are kept with an imputed gestational age
+    (experimental), and run_uio_pa() writes a report on these records.
 License: Apache License (== 2.0)
 Encoding: UTF-8
 Depends: R (>= 3.5.0)
@@ -32,7 +34,8 @@ Imports:
     tools,
     utils
 Suggests:
-    codetools
+    codetools,
+    zip
 SystemRequirements: A C++ compiler at run time (the C++ helpers are compiled with
     Rcpp::sourceCpp() when the algorithm runs; Rtools on Windows).
 Roxygen: list(markdown = TRUE)
