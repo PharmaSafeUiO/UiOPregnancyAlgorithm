@@ -1,0 +1,61 @@
+# On every push to main: build and check the package and run the tests on synthetic data. A new Version in DESCRIPTION
+# is published as release v<Version> with the source tarball; an existing release is not changed.
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          needs: check
+
+      - name: Build
+        shell: bash
+        run: |
+          R CMD build --no-build-vignettes .
+          echo "TARBALL=$(ls UiOPregnancyAlgorithm_*.tar.gz)" >> "$GITHUB_ENV"
+          echo "VERSION=$(sed -n 's/^Version: *//p' DESCRIPTION | tr -d '\r')" >> "$GITHUB_ENV"
+
+      - name: R CMD check
+        shell: bash
+        run: |
+          R CMD check --no-manual --no-tests "$TARBALL" 2>&1 | tee check.log
+          grep -q "^Status: OK" check.log
+
+      - name: Tests on synthetic data
+        shell: bash
+        run: |
+          mkdir rlib
+          R CMD INSTALL --no-multiarch --library=rlib "$TARBALL"
+          Rscript tests/missing_ga/test_missing_ga.R --lib=rlib 2>&1 | tee missing_ga.log
+          grep -q "ALL CHECKS PASSED" missing_ga.log
+          mkdir example && cd example
+          R_LIBS=../rlib Rscript ../inst/scripts/run_uio_example.R 2>&1 | tee example.log
+          test -f uio_output/uio_report.html
+
+      - name: Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # one release per package version (tag v<Version> of DESCRIPTION); a released version is not changed
+          tag="v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag exists: not changed (raise the Version in DESCRIPTION for a new release)."
+          else
+            gh release create "$tag" "$TARBALL" --target "$GITHUB_SHA" --latest \
+              --title "UiOPregnancyAlgorithm $VERSION" \
+              --notes "UiOPregnancyAlgorithm $VERSION. Changes: see NEWS.md."
+          fi

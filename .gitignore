@@ -1,0 +1,7 @@
+.Rproj.user/
+.Rhistory
+.RData
+*.Rproj
+*.tar.gz
+uio_work/
+uio_output/
